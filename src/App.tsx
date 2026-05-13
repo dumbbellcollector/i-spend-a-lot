@@ -32,7 +32,9 @@ import {
   Calendar as CalendarIcon,
   Info,
   X,
-  Menu
+  Menu,
+  Download,
+  Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -80,6 +82,10 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDataSyncModalOpen, setIsDataSyncModalOpen] = useState(false);
+  const [dataSyncMode, setDataSyncMode] = useState<'export' | 'import'>('export');
+  const [syncText, setSyncText] = useState('');
+  const [syncError, setSyncError] = useState('');
 
   // Form State
   const [formType, setFormType] = useState<TransactionType>('expense');
@@ -139,6 +145,39 @@ export default function App() {
     const now = new Date();
     setMonths([startOfMonth(now), startOfMonth(addMonths(now, 1))]);
     setIsResetModalOpen(false);
+  };
+
+  const openDataSyncModal = (mode: 'export' | 'import') => {
+    setDataSyncMode(mode);
+    setSyncError('');
+    if (mode === 'export') {
+      const data = { initialBalance, transactions };
+      const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
+      setSyncText(encoded);
+    } else {
+      setSyncText('');
+    }
+    setIsDataSyncModalOpen(true);
+  };
+
+  const handleImport = () => {
+    if (!syncText.trim()) {
+      setSyncError('데이터를 입력해주세요.');
+      return;
+    }
+    try {
+      const decoded = decodeURIComponent(atob(syncText));
+      const data = JSON.parse(decoded);
+      if (typeof data.initialBalance === 'number' && Array.isArray(data.transactions)) {
+        setInitialBalance(data.initialBalance);
+        setTransactions(data.transactions);
+        setIsDataSyncModalOpen(false);
+      } else {
+        setSyncError('잘못된 데이터 형식입니다.');
+      }
+    } catch (e) {
+      setSyncError('유효하지 않은 데이터입니다.');
+    }
   };
 
   const openForm = (date: Date, transaction?: Transaction) => {
@@ -459,6 +498,20 @@ export default function App() {
           >
             데이터 초기화
           </button>
+          <div className="flex gap-2 pt-2">
+            <button 
+              onClick={() => { openDataSyncModal('export'); setIsSidebarOpen(false); }}
+              className="flex-1 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs hover:bg-gray-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              <Upload size={14} /> 내보내기
+            </button>
+            <button 
+              onClick={() => { openDataSyncModal('import'); setIsSidebarOpen(false); }}
+              className="flex-1 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs hover:bg-gray-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              <Download size={14} /> 불러오기
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -617,6 +670,86 @@ export default function App() {
                 >
                   초기화하기
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Data Sync Modal */}
+      <AnimatePresence>
+        {isDataSyncModalOpen && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center">
+            <motion.div 
+              initial={{ opacity: 0, y: "100%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: "100%" }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-white w-full max-w-lg lg:max-w-md rounded-t-3xl lg:rounded-2xl shadow-xl p-6 lg:p-6 border-t lg:border border-gray-100 flex flex-col max-h-[80vh] pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+            >
+              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden shrink-0" />
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                <h3 className="text-lg font-bold">
+                  {dataSyncMode === 'export' ? '데이터 내보내기' : '데이터 불러오기'}
+                </h3>
+                <button 
+                  onClick={() => setIsDataSyncModalOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto min-h-0 mb-6">
+                <p className="text-sm text-gray-500 mb-4 break-keep">
+                  {dataSyncMode === 'export' 
+                    ? '아래 텍스트를 복사하여 다른 기기나 브라우저에서 사용할 수 있습니다.'
+                    : '내보내기한 텍스트를 아래에 붙여넣어주세요.'}
+                </p>
+                <textarea
+                  value={syncText}
+                  onChange={(e) => setSyncText(e.target.value)}
+                  readOnly={dataSyncMode === 'export'}
+                  className="w-full h-48 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 resize-none font-mono break-all"
+                  placeholder={dataSyncMode === 'import' ? '이곳에 텍스트를 붙여넣으세요...' : ''}
+                />
+                <AnimatePresence>
+                  {syncError && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="text-red-500 text-sm mt-2 font-medium">
+                      {syncError}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="flex gap-3 shrink-0">
+                <button 
+                  onClick={() => setIsDataSyncModalOpen(false)}
+                  className="flex-1 py-3 text-gray-500 text-sm font-semibold hover:bg-gray-50 rounded-xl border border-gray-200 transition-all"
+                >
+                  취소
+                </button>
+                {dataSyncMode === 'export' ? (
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(syncText).then(() => {
+                        alert('텍스트가 복사되었습니다!');
+                      }).catch(() => {
+                        alert('복사에 실패했습니다. 직접 선택하여 복사해주세요.');
+                      });
+                    }}
+                    className="flex-[2] py-3 bg-[#007AFF] text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all shadow-sm"
+                  >
+                    텍스트 복사하기
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleImport}
+                    className="flex-[2] py-3 bg-[#007AFF] text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all shadow-sm"
+                  >
+                    데이터 적용하기
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>
