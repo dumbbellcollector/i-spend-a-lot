@@ -38,6 +38,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import LZString from 'lz-string';
 
 // --- Types ---
 
@@ -233,8 +234,17 @@ export default function App() {
     setDataSyncMode(mode);
     setSyncError('');
     if (mode === 'export') {
-      const data = { initialBalance, transactions };
-      const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
+      const minifiedTransactions = transactions.map(t => [
+        t.id,
+        t.date,
+        t.type === 'income' ? 'I' : 'E',
+        t.amount,
+        t.memo,
+        t.isActive ? 1 : 0
+      ]);
+      const data = { v: 1, i: initialBalance, t: minifiedTransactions };
+      const serialized = JSON.stringify(data);
+      const encoded = LZString.compressToEncodedURIComponent(serialized);
       setSyncText(encoded);
     } else {
       setSyncText('');
@@ -248,15 +258,44 @@ export default function App() {
       return;
     }
     try {
-      const decoded = decodeURIComponent(atob(syncText));
+      let decoded = '';
+      const text = syncText.trim();
+      const decompressedURI = LZString.decompressFromEncodedURIComponent(text);
+      const decompressedBase64 = LZString.decompressFromBase64(text);
+      if (decompressedURI) {
+        decoded = decompressedURI;
+      } else if (decompressedBase64) {
+        decoded = decompressedBase64;
+      } else {
+        // Fallback for old data encoded with btoa
+        decoded = decodeURIComponent(atob(text));
+      }
       const data = JSON.parse(decoded);
-      if (typeof data.initialBalance === 'number' && Array.isArray(data.transactions)) {
-        setInitialBalance(data.initialBalance);
-        setTransactions(data.transactions);
-        setIsDataSyncModalOpen(false);
+      
+      let importedInitialBalance = 0;
+      let importedTransactions: Transaction[] = [];
+
+      if (data.v === 1) {
+        importedInitialBalance = data.i;
+        importedTransactions = data.t.map((t: any[]) => ({
+          id: t[0],
+          date: t[1],
+          type: t[2] === 'I' ? 'income' : 'expense',
+          amount: Number(t[3]),
+          memo: t[4],
+          isActive: Boolean(t[5])
+        }));
+      } else if (typeof data.initialBalance === 'number' && Array.isArray(data.transactions)) {
+        importedInitialBalance = data.initialBalance;
+        importedTransactions = data.transactions;
       } else {
         setSyncError('잘못된 데이터 형식입니다.');
+        return;
       }
+
+      setInitialBalance(importedInitialBalance);
+      setTransactions(importedTransactions);
+      setIsDataSyncModalOpen(false);
     } catch (e) {
       setSyncError('유효하지 않은 데이터입니다.');
     }
