@@ -577,31 +577,31 @@ export default function App() {
                 {format(selectedDate, 'M월 d일', { locale: ko })} 내역
               </label>
               <div className="space-y-3">
-                {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).map(t => (
+                {transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate)).map(tx => (
                   <div 
-                    key={t.id} 
-                    onDoubleClick={() => openForm(selectedDate, t)}
-                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 ${t.isActive ? 'bg-gray-50 border border-transparent' : 'bg-white border border-gray-100 opacity-40'}`}
+                    key={tx.id} 
+                    onDoubleClick={() => openForm(selectedDate, tx)}
+                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 ${tx.isActive ? 'bg-gray-50 border border-transparent' : 'bg-white border border-gray-100 opacity-40'}`}
                   >
                     <div className="flex flex-col min-w-0 pr-2">
-                      <span className={`text-xs font-semibold truncate ${!t.isActive ? 'line-through' : ''}`}>
-                        {t.memo || (t.type === 'income' ? window.t?.('수입') || '수입' : window.t?.('지출') || '지출')}
+                      <span className={`text-xs font-semibold truncate ${!tx.isActive ? 'line-through' : ''}`}>
+                        {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                       </span>
-                      <span className={`text-[10px] font-bold ${t.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                        {(t.type === 'income' ? '+' : '-') + formatCurrency(t.amount)}
+                      <span className={`text-[10px] font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                        {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button 
-                        onClick={() => toggleTransaction(t.id)} 
-                        className={`w-8 h-4.5 rounded-full flex items-center px-0.5 transition-all ${t.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                        onClick={() => toggleTransaction(tx.id)} 
+                        className={`w-8 h-4.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
                       >
                         <div className="w-3.5 h-3.5 bg-white rounded-full shadow-sm" />
                       </button>
-                      <button onClick={() => openForm(selectedDate, t)} className="p-1 text-gray-400 hover:text-[#007AFF] transition-colors">
+                      <button onClick={() => openForm(selectedDate, tx)} className="p-1 text-gray-400 hover:text-[#007AFF] transition-colors">
                         <Edit2 className="w-3 h-3" />
                       </button>
-                      <button onClick={() => deleteTransaction(t.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                      <button onClick={() => deleteTransaction(tx.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
@@ -708,32 +708,32 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 overscroll-contain">
-                {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).map(t => (
+                {transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate)).map(tx => (
                   <div 
-                    key={t.id} 
-                    onDoubleClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, t); }}
-                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 shadow-sm ${t.isActive ? 'bg-white border border-transparent' : 'bg-white border border-gray-100 opacity-50'}`}
+                    key={tx.id} 
+                    onDoubleClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }}
+                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 shadow-sm ${tx.isActive ? 'bg-white border border-transparent' : 'bg-white border border-gray-100 opacity-50'}`}
                   >
                     <div className="flex flex-col min-w-0 pr-2">
-                      <span className={`text-xs font-semibold truncate ${!t.isActive ? 'line-through text-gray-400' : ''}`}>
-                        {t.memo || (t.type === 'income' ? t('수입') : t('지출'))}
+                      <span className={`text-xs font-semibold truncate ${!tx.isActive ? 'line-through text-gray-400' : ''}`}>
+                        {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                       </span>
-                      <span className={`text-[11px] mt-0.5 font-bold ${t.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                        {(t.type === 'income' ? '+' : '-') + formatCurrency(t.amount)}
+                      <span className={`text-[11px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                        {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button 
-                        onClick={() => toggleTransaction(t.id)} 
-                        className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all ${t.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                        onClick={() => toggleTransaction(tx.id)} 
+                        className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
                       >
                         <div className="w-4 h-4 bg-white rounded-full shadow-sm" />
                       </button>
                       <div className="w-px h-5 bg-gray-100 mx-1"></div>
-                      <button onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, t); }} className="p-1.5 text-gray-400 hover:text-[#007AFF] transition-colors rounded-lg hover:bg-blue-50">
+                      <button onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }} className="p-1.5 text-gray-400 hover:text-[#007AFF] transition-colors rounded-lg hover:bg-blue-50">
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deleteTransaction(t.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                      <button onClick={() => deleteTransaction(tx.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>

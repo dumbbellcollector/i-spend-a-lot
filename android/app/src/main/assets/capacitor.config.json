@@ -1,0 +1,5 @@
+{
+	"appId": "com.example.cashflow",
+	"appName": "현금 흐름",
+	"webDir": "dist"
+}
