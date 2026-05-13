@@ -85,6 +85,7 @@ export default function App() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDataSyncModalOpen, setIsDataSyncModalOpen] = useState(false);
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [dataSyncMode, setDataSyncMode] = useState<'export' | 'import'>('export');
   const [syncText, setSyncText] = useState('');
   const [syncError, setSyncError] = useState('');
@@ -433,7 +434,12 @@ export default function App() {
             return (
               <div
                 key={dateKey}
-                onClick={() => setSelectedDate(day)}
+                onClick={() => {
+                  setSelectedDate(day);
+                  if (window.innerWidth < 1024) {
+                    setIsBottomSheetOpen(true);
+                  }
+                }}
                 onDoubleClick={() => openForm(day)}
                 className={`
                   bg-white min-h-[70px] md:min-h-[85px] p-1.5 md:p-2 flex flex-col justify-between cursor-pointer transition-all
@@ -564,6 +570,7 @@ export default function App() {
             </div>
           </section>
 
+          <div className="hidden lg:block">
           {selectedDate && (
             <section>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 block">
@@ -608,6 +615,7 @@ export default function App() {
               </div>
             </section>
           )}
+          </div>
         </div>
 
         <div className="pt-6 space-y-2 mt-auto">
@@ -659,6 +667,101 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Mobile Transaction List Bottom Sheet */}
+      <AnimatePresence>
+        {isBottomSheetOpen && selectedDate && (
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-40 flex items-end lg:hidden justify-center"
+            onClick={() => setIsBottomSheetOpen(false)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: "100%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: "100%" }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.2}
+              onDragEnd={(e, info) => {
+                if (info.offset.y > 100) {
+                  setIsBottomSheetOpen(false);
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#F9FAFB] w-full rounded-t-3xl shadow-xl flex flex-col max-h-[85vh] absolute bottom-0"
+            >
+              <div 
+                className="w-full pt-4 pb-3 flex justify-center items-center cursor-ns-resize touch-none"
+              >
+                <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+              </div>
+              <div className="px-6 pb-4 flex justify-between items-center border-b border-gray-200 shrink-0">
+                <h3 className="text-lg font-bold">
+                  {format(selectedDate, 'M월 d일', { locale: ko })}
+                </h3>
+                <button 
+                  onClick={() => setIsBottomSheetOpen(false)}
+                  className="p-2 text-gray-400 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 overscroll-contain">
+                {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).map(t => (
+                  <div 
+                    key={t.id} 
+                    onDoubleClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, t); }}
+                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 shadow-sm ${t.isActive ? 'bg-white border border-transparent' : 'bg-white border border-gray-100 opacity-50'}`}
+                  >
+                    <div className="flex flex-col min-w-0 pr-2">
+                      <span className={`text-xs font-semibold truncate ${!t.isActive ? 'line-through text-gray-400' : ''}`}>
+                        {t.memo || (t.type === 'income' ? t('수입') : t('지출'))}
+                      </span>
+                      <span className={`text-[11px] mt-0.5 font-bold ${t.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                        {(t.type === 'income' ? '+' : '-') + formatCurrency(t.amount)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button 
+                        onClick={() => toggleTransaction(t.id)} 
+                        className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all ${t.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                      >
+                        <div className="w-4 h-4 bg-white rounded-full shadow-sm" />
+                      </button>
+                      <div className="w-px h-5 bg-gray-100 mx-1"></div>
+                      <button onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, t); }} className="p-1.5 text-gray-400 hover:text-[#007AFF] transition-colors rounded-lg hover:bg-blue-50">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => deleteTransaction(t.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).length === 0 && (
+                  <div className="text-center py-10 text-sm text-gray-400">
+                    등록된 내역이 없습니다.
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-gray-200 shrink-0 bg-white pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+                <button 
+                  onClick={() => {
+                    setIsBottomSheetOpen(false);
+                    openForm(selectedDate);
+                  }}
+                  className="w-full py-3.5 bg-[#007AFF] text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm active:scale-95 flex justify-center items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" /> {t('기록 추가하기')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-8 flex flex-col items-center bg-[#F8F9FA]">
         <div className="w-full max-w-5xl flex flex-col gap-8 pb-8">
@@ -689,12 +792,16 @@ export default function App() {
       {/* Transaction Entry Modal - Bottom Sheet on mobile */}
       <AnimatePresence>
         {isFormOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center">
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center"
+            onClick={() => setIsFormOpen(false)}
+          >
             <motion.div 
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               className="bg-white w-full max-w-lg lg:max-w-sm rounded-t-3xl lg:rounded-2xl shadow-xl p-6 lg:p-6 border-t lg:border border-gray-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden" />
@@ -780,12 +887,16 @@ export default function App() {
       {/* Reset Confirmation Modal */}
       <AnimatePresence>
         {isResetModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center">
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center"
+            onClick={() => setIsResetModalOpen(false)}
+          >
             <motion.div 
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               className="bg-white w-full max-w-lg lg:max-w-sm rounded-t-3xl lg:rounded-2xl shadow-xl p-6 border-t lg:border border-gray-100 text-center pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden" />
@@ -817,12 +928,16 @@ export default function App() {
       {/* Data Sync Modal */}
       <AnimatePresence>
         {isDataSyncModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center">
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center"
+            onClick={() => setIsDataSyncModalOpen(false)}
+          >
             <motion.div 
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               className="bg-white w-full max-w-lg lg:max-w-md rounded-t-3xl lg:rounded-2xl shadow-xl p-6 lg:p-6 border-t lg:border border-gray-100 flex flex-col max-h-[80vh] pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden shrink-0" />
@@ -897,12 +1012,16 @@ export default function App() {
       {/* Help Modal */}
       <AnimatePresence>
         {isHelpModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center">
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center"
+            onClick={() => setIsHelpModalOpen(false)}
+          >
             <motion.div 
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               className="bg-white w-full max-w-lg lg:max-w-sm rounded-t-3xl lg:rounded-2xl shadow-xl p-6 border-t lg:border border-gray-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden" />
