@@ -35,7 +35,9 @@ import {
   Menu,
   Download,
   Upload,
-  HelpCircle
+  HelpCircle,
+  TrendingDown,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
@@ -90,6 +92,7 @@ export default function App() {
   const [syncText, setSyncText] = useState('');
   const [syncError, setSyncError] = useState('');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isDeathValleyModalOpen, setIsDeathValleyModalOpen] = useState(false);
   const [titleTapCount, setTitleTapCount] = useState(0);
   const [showEasterEgg, setShowEasterEgg] = useState(false);
   const [isComradeMode, setIsComradeMode] = useState(false);
@@ -302,7 +305,7 @@ export default function App() {
     }
   };
 
-  const openForm = (date: Date, transaction?: Transaction) => {
+  const openForm = (date: Date, transaction?: Transaction, defaultType?: TransactionType) => {
     if (transaction) {
       setEditingId(transaction.id);
       setFormType(transaction.type);
@@ -311,7 +314,7 @@ export default function App() {
       setFormDate(parseISO(transaction.date));
     } else {
       setEditingId(null);
-      setFormType('expense');
+      setFormType(defaultType || 'expense');
       setFormAmount('');
       setFormMemo('');
       setFormDate(date);
@@ -390,6 +393,21 @@ export default function App() {
 
     return dailyStats;
   }, [transactions, initialBalance, months]);
+
+  const deathValleyInfo = useMemo(() => {
+    let minBalance = Infinity;
+    let minDate = '';
+    
+    Object.entries(simulationData).forEach(([date, data]) => {
+      if (data.balance < minBalance) {
+        minBalance = data.balance;
+        minDate = date;
+      }
+    });
+
+    if (minBalance === Infinity || Object.keys(simulationData).length === 0) return null;
+    return { date: parseISO(minDate), balance: minBalance };
+  }, [simulationData]);
 
   const removeMonth = (monthToRemove: Date) => {
     if (months.length <= 1) return;
@@ -501,8 +519,15 @@ export default function App() {
             {t('현금 흐름')}
           </h1>
         </div>
-        <div className="text-sm font-bold text-[#007AFF]">
-          {formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}
+        <div className="flex items-center gap-3">
+          {deathValleyInfo && (
+            <button 
+              onClick={() => setIsDeathValleyModalOpen(true)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-orange-600 rounded-full text-xs font-bold transition-colors hover:bg-orange-100 active:scale-95"
+            >
+              <TrendingDown className="w-3.5 h-3.5" /> 데스 밸리
+            </button>
+          )}
         </div>
       </header>
 
@@ -516,7 +541,7 @@ export default function App() {
         `}
       >
         <div className="flex items-center justify-between mb-6">
-          <div>
+          <div className="flex flex-col">
             <h1 
               className="text-lg font-bold tracking-tight mb-0.5 select-none hover:text-[#007AFF] transition-colors cursor-pointer"
               onClick={handleTitleClick}
@@ -563,7 +588,15 @@ export default function App() {
             </div>
             <div className="h-px bg-gray-100 my-1"></div>
             <div className="flex justify-between items-end">
-              <span className="text-sm font-medium">{t('기말 잔액')}</span>
+              <span className="text-sm font-medium flex items-center gap-1">
+                {t('기말 잔액')}
+                <button 
+                  onClick={() => setIsHelpModalOpen(true)}
+                  className="text-gray-400 hover:text-[#007AFF] transition-colors p-0.5"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </button>
+              </span>
               <span className="text-base font-bold text-[#1C1C1E]">
                 {formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}
               </span>
@@ -695,48 +728,79 @@ export default function App() {
               >
                 <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
               </div>
-              <div className="px-6 pb-4 flex justify-between items-center border-b border-gray-200 shrink-0">
-                <h3 className="text-lg font-bold">
-                  {format(selectedDate, 'M월 d일', { locale: ko })}
-                </h3>
-                <button 
-                  onClick={() => setIsBottomSheetOpen(false)}
-                  className="p-2 text-gray-400 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              <div className="px-6 pb-4 border-b border-gray-200 shrink-0">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-bold">
+                    {format(selectedDate, 'M월 d일', { locale: ko })}
+                  </h3>
+                  <button 
+                    onClick={() => setIsBottomSheetOpen(false)}
+                    className="p-2 text-gray-400 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                {(() => {
+                  const dayTransactions = transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate) && tx.isActive);
+                  const income = dayTransactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
+                  const expense = dayTransactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+                  const total = income - expense;
+                  return (
+                    <div className="text-[13px] font-medium text-gray-600 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[#007AFF]">+{formatCurrency(income)}</span>
+                      <span className="text-gray-400">-</span>
+                      <span className="text-[#FF3B30]">{formatCurrency(expense)}</span>
+                      <span className="text-gray-400">=</span>
+                      <span className={`font-bold ${total >= 0 ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                        {total > 0 ? '+' : ''}{formatCurrency(total)}{t('원')}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 overscroll-contain">
+              <div className="flex-1 overflow-y-auto px-0 py-0 overscroll-contain bg-white pb-6">
+                <div className="divide-y divide-gray-100 border-b border-gray-100">
                 {transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate)).map(tx => (
-                  <div 
-                    key={tx.id} 
-                    onDoubleClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }}
-                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 shadow-sm ${tx.isActive ? 'bg-white border border-transparent' : 'bg-white border border-gray-100 opacity-50'}`}
-                  >
-                    <div className="flex flex-col min-w-0 pr-2">
-                      <span className={`text-xs font-semibold truncate ${!tx.isActive ? 'line-through text-gray-400' : ''}`}>
-                        {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
-                      </span>
-                      <span className={`text-[11px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                        {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                  <div key={tx.id} className="relative bg-gray-50 overflow-hidden">
+                    <div className="absolute inset-y-0 right-0 flex items-stretch">
                       <button 
-                        onClick={() => toggleTransaction(tx.id)} 
-                        className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                        onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }}
+                        className="px-5 bg-[#007AFF] text-white flex items-center justify-center font-bold text-xs"
                       >
-                        <div className="w-4 h-4 bg-white rounded-full shadow-sm" />
+                        {t('수정')}
                       </button>
-                      <div className="w-px h-5 bg-gray-100 mx-1"></div>
-                      <button onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }} className="p-1.5 text-gray-400 hover:text-[#007AFF] transition-colors rounded-lg hover:bg-blue-50">
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => deleteTransaction(tx.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button 
+                        onClick={() => deleteTransaction(tx.id)}
+                        className="px-5 bg-[#FF3B30] text-white flex items-center justify-center font-bold text-xs"
+                      >
+                        {t('삭제')}
                       </button>
                     </div>
+                    <motion.div 
+                      drag="x"
+                      dragConstraints={{ left: -140, right: 0 }}
+                      dragElastic={0.1}
+                      className={`relative flex items-center justify-between p-4 px-6 transition-colors select-none ${tx.isActive ? 'bg-white' : 'bg-gray-50/90'}`}
+                    >
+                      <div className="flex flex-col min-w-0 pr-2">
+                        <span className={`text-[13px] font-semibold truncate ${!tx.isActive ? 'line-through text-gray-400' : ''}`}>
+                          {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
+                        </span>
+                        <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                          {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 pr-2">
+                        <button 
+                          onClick={() => toggleTransaction(tx.id)} 
+                          onPointerDownCapture={e => e.stopPropagation()}
+                          className={`w-10 h-5.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                        >
+                          <div className="w-4.5 h-4.5 bg-white rounded-full shadow-sm" />
+                        </button>
+                      </div>
+                    </motion.div>
                   </div>
                 ))}
                 {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).length === 0 && (
@@ -744,17 +808,27 @@ export default function App() {
                     등록된 내역이 없습니다.
                   </div>
                 )}
+                </div>
               </div>
 
-              <div className="p-6 border-t border-gray-200 shrink-0 bg-white pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+              <div className="p-6 border-t border-gray-200 shrink-0 bg-white pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex gap-3">
                 <button 
                   onClick={() => {
                     setIsBottomSheetOpen(false);
-                    openForm(selectedDate);
+                    openForm(selectedDate, undefined, 'income');
                   }}
-                  className="w-full py-3.5 bg-[#007AFF] text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm active:scale-95 flex justify-center items-center gap-2"
+                  className="flex-1 py-3.5 bg-[#007AFF]/10 text-[#007AFF] rounded-xl font-bold text-sm hover:bg-[#007AFF]/20 transition-colors shadow-sm border border-[#007AFF]/20 active:scale-95 flex justify-center items-center gap-1.5"
                 >
-                  <Plus className="w-5 h-5" /> {t('기록 추가하기')}
+                  <Plus className="w-4 h-4" /> {t('수입 기록')}
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsBottomSheetOpen(false);
+                    openForm(selectedDate, undefined, 'expense');
+                  }}
+                  className="flex-1 py-3.5 bg-[#FF3B30]/10 text-[#FF3B30] rounded-xl font-bold text-sm hover:bg-[#FF3B30]/20 transition-colors shadow-sm border border-[#FF3B30]/20 active:scale-95 flex justify-center items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" /> {t('지출 기록')}
                 </button>
               </div>
             </motion.div>
@@ -781,12 +855,6 @@ export default function App() {
             <Plus className="w-5 h-5" /> {t('다음 달력 추가')}
           </button>
         </div>
-        <button 
-          onClick={() => setIsHelpModalOpen(true)}
-          className="fixed bottom-6 right-6 lg:bottom-8 lg:right-8 w-12 h-12 bg-white text-[#007AFF] border border-gray-200 rounded-full shadow-xl flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all z-30"
-        >
-          <HelpCircle className="w-6 h-6" />
-        </button>
       </main>
 
       {/* Transaction Entry Modal - Bottom Sheet on mobile */}
@@ -918,6 +986,73 @@ export default function App() {
                   className="flex-[2] py-3 bg-[#FF3B30] text-white rounded-lg font-semibold text-sm hover:bg-red-600 transition-all shadow-sm"
                 >
                   {isComradeMode ? '혁명수행' : '초기화하기'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Death Valley Modal */}
+      <AnimatePresence>
+        {isDeathValleyModalOpen && (
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4"
+            onClick={() => setIsDeathValleyModalOpen(false)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full max-w-sm rounded-2xl shadow-xl p-6 border border-gray-100"
+            >
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
+                    <TrendingDown className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">데스 밸리 예측</h3>
+                </div>
+                <button 
+                  onClick={() => setIsDeathValleyModalOpen(false)}
+                  className="p-2 text-gray-400 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {deathValleyInfo ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-xl">
+                    <p className="text-xs text-orange-800 font-medium mb-1">예상 최저 잔액 발생일</p>
+                    <p className="text-lg font-bold text-orange-600">
+                      {format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-600">해당일 잔고 예측</span>
+                    <span className={`text-lg font-bold ${deathValleyInfo.balance < 0 ? 'text-[#FF3B30]' : 'text-gray-900'}`}>
+                      {formatCurrency(deathValleyInfo.balance)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed pt-2">
+                    시뮬레이션 기간 동안 잔고가 가장 낮은 지점입니다. 잔고가 마이너스로 내려가지 않도록 유동성을 관리하세요.
+                  </p>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-gray-400 text-sm">
+                  데이터가 없어 예측할 수 없습니다.
+                </div>
+              )}
+
+              <div className="mt-6 pt-4 border-t border-gray-100">
+                <button 
+                  onClick={() => setIsDeathValleyModalOpen(false)}
+                  className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors active:scale-95"
+                >
+                  확인
                 </button>
               </div>
             </motion.div>
