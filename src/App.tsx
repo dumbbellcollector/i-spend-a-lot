@@ -520,14 +520,20 @@ export default function App() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          {deathValleyInfo && (
-            <button 
-              onClick={() => setIsDeathValleyModalOpen(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-orange-600 rounded-full text-xs font-bold transition-colors hover:bg-orange-100 active:scale-95"
-            >
-              <TrendingDown className="w-3.5 h-3.5" /> 데스 밸리
-            </button>
-          )}
+          {(() => {
+            const finalBalance = simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance;
+            const isNegative = finalBalance < 0;
+            return deathValleyInfo ? (
+              <button 
+                onClick={() => setIsDeathValleyModalOpen(true)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors active:scale-95 ${
+                  isNegative ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
+                }`}
+              >
+                <TrendingDown className="w-3.5 h-3.5" /> {isNegative ? '추경 필요' : '건전재정'}
+              </button>
+            ) : null;
+          })()}
         </div>
       </header>
 
@@ -752,7 +758,7 @@ export default function App() {
                       <span className="text-[#FF3B30]">{formatCurrency(expense)}</span>
                       <span className="text-gray-400">=</span>
                       <span className={`font-bold ${total >= 0 ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                        {total > 0 ? '+' : ''}{formatCurrency(total)}{t('원')}
+                        {total > 0 ? '+' : ''}{formatCurrency(total)}
                       </span>
                     </div>
                   );
@@ -765,12 +771,6 @@ export default function App() {
                   <div key={tx.id} className="relative bg-gray-50 overflow-hidden">
                     <div className="absolute inset-y-0 right-0 flex items-stretch">
                       <button 
-                        onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }}
-                        className="px-5 bg-[#007AFF] text-white flex items-center justify-center font-bold text-xs"
-                      >
-                        {t('수정')}
-                      </button>
-                      <button 
                         onClick={() => deleteTransaction(tx.id)}
                         className="px-5 bg-[#FF3B30] text-white flex items-center justify-center font-bold text-xs"
                       >
@@ -779,12 +779,13 @@ export default function App() {
                     </div>
                     <motion.div 
                       drag="x"
-                      dragConstraints={{ left: -140, right: 0 }}
+                      dragConstraints={{ left: -70, right: 0 }}
                       dragElastic={0.1}
-                      className={`relative flex items-center justify-between p-4 px-6 transition-colors select-none ${tx.isActive ? 'bg-white' : 'bg-gray-50/90'}`}
+                      onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }}
+                      className={`relative flex items-center justify-between p-4 px-6 transition-colors select-none ${tx.isActive ? 'bg-white' : 'bg-gray-100'}`}
                     >
-                      <div className="flex flex-col min-w-0 pr-2">
-                        <span className={`text-[13px] font-semibold truncate ${!tx.isActive ? 'line-through text-gray-400' : ''}`}>
+                      <div className={`flex flex-col min-w-0 pr-2 ${!tx.isActive ? 'opacity-40' : ''}`}>
+                        <span className={`text-[13px] font-semibold truncate ${!tx.isActive ? 'line-through' : ''}`}>
                           {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                         </span>
                         <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
@@ -793,7 +794,7 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0 pr-2">
                         <button 
-                          onClick={() => toggleTransaction(tx.id)} 
+                          onClick={(e) => { e.stopPropagation(); toggleTransaction(tx.id); }} 
                           onPointerDownCapture={e => e.stopPropagation()}
                           className={`w-10 h-5.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
                         >
