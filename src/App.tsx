@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
 
 // --- Types ---
 
@@ -412,6 +413,32 @@ export default function App() {
 
     if (minBalance === Infinity || Object.keys(simulationData).length === 0) return null;
     return { date: parseISO(minDate), balance: minBalance };
+  }, [simulationData]);
+
+  const deathValleyChartData = useMemo(() => {
+    const dataPoints = Object.entries(simulationData).map(([date, data]) => ({
+      date,
+      dateLabel: format(parseISO(date), 'M/d'),
+      balance: data.balance
+    }));
+    
+    if (dataPoints.length === 0) return [];
+
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    let startIndex = dataPoints.findIndex(p => p.date >= todayStr);
+    if (startIndex === -1) startIndex = 0;
+    
+    let minIndex = startIndex;
+    for (let i = startIndex; i < dataPoints.length; i++) {
+        if (dataPoints[i].balance < dataPoints[minIndex].balance) {
+            minIndex = i;
+        }
+    }
+
+    startIndex = Math.max(0, startIndex - 2);
+    let endIndex = Math.min(dataPoints.length - 1, Math.max(minIndex + 5, startIndex + 10));
+    
+    return dataPoints.slice(startIndex, endIndex + 1);
   }, [simulationData]);
 
   const removeMonth = (monthToRemove: Date) => {
@@ -1051,13 +1078,60 @@ export default function App() {
                 <div className="space-y-4">
                   <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-xl">
                     <p className="text-xs text-orange-800 font-medium mb-1">{t('예상 최저 잔액 발생일')}</p>
-                    <p className="text-lg font-bold text-orange-600">
-                      {format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })}
+                    <p className="text-lg font-bold text-orange-600 flex justify-between items-end">
+                      <span>{format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })}</span>
+                      <span className={`text-[15px] ${deathValleyInfo.balance < 0 ? 'text-[#FF3B30]' : 'text-gray-900'}`}>
+                        {formatCurrency(deathValleyInfo.balance)}
+                      </span>
                     </p>
                   </div>
-                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center justify-center text-sm font-medium text-blue-800 text-center">
-                    추후 이곳에 날짜별 잔액 추이 그래프가 추가될 예정입니다.
+                  
+                  <div className="h-48 w-full -ml-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={deathValleyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                        <XAxis 
+                          dataKey="dateLabel" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#6B7280' }} 
+                          dy={10}
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fill: '#6B7280' }}
+                          tickFormatter={(value) => value === 0 ? '0' : `${(value / 10000).toLocaleString()}만`}
+                          width={45}
+                        />
+                        <Tooltip 
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              return (
+                                <div className="bg-white border border-gray-100 shadow-lg p-2 rounded-lg text-xs">
+                                  <p className="text-gray-500 mb-1">{payload[0].payload.date}</p>
+                                  <p className={`font-bold ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-[#FF3B30]' : 'text-[#007AFF]'}`}>
+                                    {formatCurrency(Number(payload[0].value))}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <ReferenceLine y={0} stroke="#FF3B30" strokeDasharray="3 3" opacity={0.5} />
+                        <Line 
+                          type="monotone" 
+                          dataKey="balance" 
+                          stroke="#007AFF" 
+                          strokeWidth={2.5}
+                          dot={{ r: 2, fill: '#007AFF' }}
+                          activeDot={{ r: 5, fill: '#007AFF', stroke: 'white', strokeWidth: 2 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
+
                   <p className="text-xs text-gray-500 leading-relaxed pt-2">
                     시뮬레이션 기간 동안 잔고가 가장 낮은 지점입니다. 잔고가 마이너스로 내려가지 않도록 유동성을 관리하세요.
                   </p>
