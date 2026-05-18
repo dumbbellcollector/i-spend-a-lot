@@ -35,6 +35,7 @@ import {
   Menu,
   Download,
   Upload,
+  Settings,
   HelpCircle,
   TrendingDown,
   AlertTriangle
@@ -85,7 +86,7 @@ export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'settings' | 'calendar'>('calendar');
   const [isDataSyncModalOpen, setIsDataSyncModalOpen] = useState(false);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [dataSyncMode, setDataSyncMode] = useState<'export' | 'import'>('export');
@@ -128,6 +129,10 @@ export default function App() {
       '이전 달력 추가': '지난 달력 덧붙이기',
       '다음 달력 추가': '다음 달력 덧붙이기',
       '앱 사용 가이드': '인민 생활 규범',
+      '앱 사용법': '인민 생활 규범',
+      '내역 관리하기': '과업 지도하기',
+      '재정 시뮬레이션': '자금 조작 훈련',
+      '설정 및 데이터 관리': '기밀 보존 및 설정',
       '내역 기입하기': '동향 등록하기',
       '시뮬레이션 토글': '시뮬레이션 조작',
       '무한 스크롤 달력': '끝없는 달력',
@@ -504,49 +509,55 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen w-full bg-[#F8F9FA] overflow-hidden">
-      {/* Mobile Top Header */}
-      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-[#E5E7EB] shrink-0 safe-top-padding">
-        <div className="flex items-center gap-2">
-          <Menu 
-            className="w-6 h-6 text-gray-600 cursor-pointer" 
-            onClick={() => setIsSidebarOpen(true)} 
-          />
-          <h1 
-            className="text-base font-bold tracking-tight select-none cursor-pointer active:scale-95 transition-transform"
-            onClick={handleTitleClick}
+    <div className="flex flex-col h-screen w-full bg-[#F8F9FA] overflow-hidden">
+      {/* Mobile Floating Pills Navigation */}
+      <div className="lg:hidden fixed top-0 w-full z-40 pointer-events-none safe-top-padding pt-3 px-4 flex gap-2 overflow-x-auto no-scrollbar">
+          <button 
+            onClick={() => {
+              if (activeTab === 'calendar') handleTitleClick();
+              else setActiveTab('calendar');
+            }}
+            className={`pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 ${activeTab === 'calendar' ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}
           >
-            {t('현금 흐름')}
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
+            <CalendarIcon className="w-3.5 h-3.5" /> 달력
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 ${activeTab === 'settings' ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}
+          >
+            <Settings className="w-3.5 h-3.5" /> 설정
+          </button>
           {(() => {
-            const finalBalance = simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance;
-            const isNegative = finalBalance < 0;
-            return deathValleyInfo ? (
-              <button 
-                onClick={() => setIsDeathValleyModalOpen(true)}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors active:scale-95 ${
-                  isNegative ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
-                }`}
-              >
-                <TrendingDown className="w-3.5 h-3.5" /> {isNegative ? '추경 필요' : '건전재정'}
-              </button>
-            ) : null;
-          })()}
-        </div>
-      </header>
+             const finalBalance = simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance;
+             const isNegative = finalBalance < 0;
+             return deathValleyInfo ? (
+               <button 
+                 onClick={() => setIsDeathValleyModalOpen(true)}
+                 className={`pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold shadow-sm border transition-colors active:scale-95 shrink-0 ${
+                   isNegative ? 'bg-white border-red-200 text-red-600' : 'bg-white border-green-200 text-green-600'
+                 }`}
+               >
+                 <TrendingDown className="w-3.5 h-3.5" /> {isNegative ? '추경 필요' : '건전재정'}
+               </button>
+             ) : null;
+           })()}
+          <button 
+            onClick={() => setIsHelpModalOpen(true)}
+            className="pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 bg-white border-gray-200 text-gray-700 active:scale-95"
+          >
+            <HelpCircle className="w-3.5 h-3.5" /> {t('앱 사용법')}
+          </button>
+      </div>
 
-      {/* Sidebar - Drawer on mobile, sidebar on desktop */}
-      <aside 
-        className={`
-          fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-[#E5E7EB] flex flex-col p-6 
-          transition-transform duration-300 ease-in-out
-          lg:relative lg:translate-x-0 lg:z-0 lg:flex
-          ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
-        `}
-      >
-        <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+        {/* Sidebar - Drawer on mobile, sidebar on desktop */}
+        <aside 
+          className={`
+            w-full lg:w-72 bg-white border-r border-[#E5E7EB] flex-col p-6 pt-20 lg:pt-6
+            ${activeTab === 'settings' ? 'flex overflow-y-auto' : 'hidden lg:flex overflow-hidden'}
+          `}
+        >
+          <div className="hidden lg:flex items-center justify-between mb-6">
           <div className="flex flex-col">
             <h1 
               className="text-lg font-bold tracking-tight mb-0.5 select-none hover:text-[#007AFF] transition-colors cursor-pointer"
@@ -558,7 +569,7 @@ export default function App() {
           </div>
           <button 
             className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
-            onClick={() => setIsSidebarOpen(false)}
+            onClick={() => setActiveTab('calendar')}
           >
             <X className="w-6 h-6" />
           </button>
@@ -660,17 +671,7 @@ export default function App() {
         <div className="pt-6 space-y-2 mt-auto">
           <button 
             onClick={() => {
-              openForm(selectedDate);
-              setIsSidebarOpen(false);
-            }}
-            className="w-full py-3 bg-[#007AFF] text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-sm active:scale-95"
-          >
-            {t('기록 추가하기')}
-          </button>
-          <button 
-            onClick={() => {
               setIsResetModalOpen(true);
-              setIsSidebarOpen(false);
             }}
             className="w-full py-3 bg-white text-[#FF3B30] border border-red-100 rounded-xl font-semibold text-sm hover:bg-red-50 transition-colors shadow-sm active:scale-95"
           >
@@ -678,33 +679,76 @@ export default function App() {
           </button>
           <div className="flex gap-2 pt-2">
             <button 
-              onClick={() => { openDataSyncModal('export'); setIsSidebarOpen(false); }}
+              onClick={() => openDataSyncModal('export')}
               className="flex-1 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs hover:bg-gray-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
             >
               <Upload size={14} /> {t('내보내기')}
             </button>
             <button 
-              onClick={() => { openDataSyncModal('import'); setIsSidebarOpen(false); }}
+              onClick={() => openDataSyncModal('import')}
               className="flex-1 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs hover:bg-gray-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
             >
               <Download size={14} /> {t('불러오기')}
             </button>
           </div>
         </div>
-      </aside>
+        </aside>
 
-      {/* Mobile Sidebar Overlay */}
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-30 lg:hidden"
-          />
-        )}
-      </AnimatePresence>
+        <main className={`flex-1 overflow-y-auto px-4 pt-20 pb-8 lg:p-8 flex-col items-center bg-[#F8F9FA] relative ${activeTab === 'calendar' ? 'flex' : 'hidden lg:flex'}`}>
+          {/* Main Desktop Header */}
+          <div className="hidden lg:flex items-center justify-between w-full max-w-5xl mb-6">
+            <div className="flex flex-col">
+              <h1 className="text-xl font-bold tracking-tight select-none cursor-pointer hover:text-[#007AFF] transition-colors" onClick={handleTitleClick}>
+                {t('현금 흐름')}
+              </h1>
+              <p className="text-[10px] text-gray-500">{t('Cash Flow Simulation')}</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsHelpModalOpen(true)}
+                className="text-gray-400 hover:text-[#007AFF] transition-colors p-1.5"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </button>
+              {(() => {
+                const finalBalance = simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance;
+                const isNegative = finalBalance < 0;
+                return deathValleyInfo ? (
+                  <button 
+                    onClick={() => setIsDeathValleyModalOpen(true)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-colors active:scale-95 shadow-sm border ${
+                      isNegative 
+                        ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' 
+                        : 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100'
+                    }`}
+                  >
+                    <TrendingDown className="w-4 h-4" /> {isNegative ? '추경 필요' : '건전재정'}
+                  </button>
+                ) : null;
+              })()}
+            </div>
+          </div>
+          
+          <div className="w-full max-w-5xl flex flex-col gap-8 pb-8">
+            <button 
+              onClick={loadPreviousMonth}
+              className="w-full py-3 border-2 border-dashed border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus className="w-5 h-5" /> {t('이전 달력 추가')}
+            </button>
+
+            {months.map(month => renderCalendar(month))}
+
+            <button 
+              onClick={loadNextMonth}
+              className="w-full py-3 border-2 border-dashed border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus className="w-5 h-5" /> {t('다음 달력 추가')}
+            </button>
+          </div>
+        </main>
+      </div>
 
       {/* Mobile Transaction List Bottom Sheet */}
       <AnimatePresence>
@@ -836,27 +880,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-8 flex flex-col items-center bg-[#F8F9FA]">
-        <div className="w-full max-w-5xl flex flex-col gap-8 pb-8">
-          <button 
-            onClick={loadPreviousMonth}
-            className="w-full py-3 border-2 border-dashed border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 transition-all flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" /> {t('이전 달력 추가')}
-          </button>
-
-          {months.map(month => renderCalendar(month))}
-
-          <button 
-            onClick={loadNextMonth}
-            className="w-full py-3 border-2 border-dashed border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 transition-all flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" /> {t('다음 달력 추가')}
-          </button>
-        </div>
-      </main>
 
       {/* Transaction Entry Modal - Bottom Sheet on mobile */}
       <AnimatePresence>
@@ -1014,7 +1037,7 @@ export default function App() {
                   <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
                     <TrendingDown className="w-4 h-4" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">데스 밸리 예측</h3>
+                  <h3 className="text-lg font-bold text-gray-900">{t('재정 건전도 예측')}</h3>
                 </div>
                 <button 
                   onClick={() => setIsDeathValleyModalOpen(false)}
@@ -1027,16 +1050,13 @@ export default function App() {
               {deathValleyInfo ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-xl">
-                    <p className="text-xs text-orange-800 font-medium mb-1">예상 최저 잔액 발생일</p>
+                    <p className="text-xs text-orange-800 font-medium mb-1">{t('예상 최저 잔액 발생일')}</p>
                     <p className="text-lg font-bold text-orange-600">
                       {format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })}
                     </p>
                   </div>
-                  <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-600">해당일 잔고 예측</span>
-                    <span className={`text-lg font-bold ${deathValleyInfo.balance < 0 ? 'text-[#FF3B30]' : 'text-gray-900'}`}>
-                      {formatCurrency(deathValleyInfo.balance)}
-                    </span>
+                  <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center justify-center text-sm font-medium text-blue-800 text-center">
+                    추후 이곳에 날짜별 잔액 추이 그래프가 추가될 예정입니다.
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed pt-2">
                     시뮬레이션 기간 동안 잔고가 가장 낮은 지점입니다. 잔고가 마이너스로 내려가지 않도록 유동성을 관리하세요.
@@ -1172,16 +1192,16 @@ export default function App() {
 
               <div className="space-y-3 text-sm text-gray-600">
                 <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-gray-900 mb-1"><span className="mr-1">📅</span>{t('내역 기입하기')}</strong>
-                  {isComradeMode ? '달력 일자를 과감히 두 번 치시오. 공화국 번영을 위한 수입과 지출을 보고할 수 있소.' : '달력의 특정 날짜를 더블 클릭(탭)하면 해당 날짜에 수입과 지출을 추가할 수 있습니다.'}
+                  <strong className="block text-gray-900 mb-1"><span className="mr-1">📅</span>{t('내역 관리하기')}</strong>
+                  {isComradeMode ? '달력 일자를 두 번 쳐서 기입하고, 명단 항목을 다시 눌러 수정하시오.' : '달력 날짜를 더블 탭하여 수입/지출을 등록하고, 날짜 선택 후 나타나는 개별 내역을 탭하여 즉시 수정/삭제할 수 있습니다.'}
                 </div>
                 <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-gray-900 mb-1"><span className="mr-1">💰</span>{t('시뮬레이션 토글')}</strong>
-                  {isComradeMode ? '명단에서 전원을 내리면, 해당 항목이 제외된 인민 자산 총계가 어찌 되는지 똑똑히 볼 수 있소.' : '왼쪽 패널(모바일은 메뉴)에서 내역별 스위치를 끄면 해당 내역 금액이 제외된 잔액을 캘린더에서 즉시 확인할 수 있습니다.'}
+                  <strong className="block text-gray-900 mb-1"><span className="mr-1">💰</span>{t('재정 시뮬레이션')}</strong>
+                  {isComradeMode ? '항목의 스위치를 내리면 그 돈이 빠졌을 때 자금이 어찌 되는지 알 수 있소. 상단의 건전도 평가를 주시하시오.' : '개별 내역의 토글 기능을 통해 지출/수입을 시뮬레이션 할 수 있습니다. 상단의 건전재정/추경필요 버튼을 통해 잔액 예측 결과를 주시하세요.'}
                 </div>
                 <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-gray-900 mb-1"><span className="mr-1">📜</span>{t('무한 스크롤 달력')}</strong>
-                  {isComradeMode ? '화면 우하단의 단추로 과거와 미래를 넘나들며 끝없이 로작을 남길 수 있소.' : '가운데 화면 상/하단의 이전/다음 달력 버튼을 눌러 원하는 기간까지 달력을 추가할 수 있습니다.'}
+                  <strong className="block text-gray-900 mb-1"><span className="mr-1">⚙️</span>{t('설정 및 데이터 관리')}</strong>
+                  {isComradeMode ? '설정에서 기초 자본금액을 수정하거나, 지난 기록을 반출/반입하여 기밀을 보존하시오.' : '설정 탭에서 초기 잔액을 변경할 수 있으며, 데이터 내보내기/불러오기를 통해 안전한 백업과 복원이 가능합니다.'}
                 </div>
               </div>
               
