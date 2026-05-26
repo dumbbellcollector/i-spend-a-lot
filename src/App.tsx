@@ -104,9 +104,8 @@ export default function App() {
   const t = (str: string) => {
     if (!isComradeMode) return str;
     const dict: Record<string, string> = {
-      '현금 흐름': '자금 류통',
-      '현금 흐름 시뮬레이터': '인민 화폐 류통 시뮬레이터',
-      'Cash Flow Simulation': '배급표 계산기',
+      'Balance Calendar': '자금 류통 달력',
+      'Finance Simulation': '배급표 계산기',
       '기초 자산 설정': '기본 배급량 설정',
       '총 수입 (예정)': '총 배급 (계획)',
       '총 지출 (예정)': '총 소모 (계획)',
@@ -161,9 +160,83 @@ export default function App() {
   const [formDate, setFormDate] = useState<Date>(new Date());
 
   const [months, setMonths] = useState<Date[]>(() => {
+    let savedMonths: Date[] = [];
+    const saved = localStorage.getItem('cashFlow_months');
+    if (saved) {
+      try {
+        savedMonths = JSON.parse(saved).map((d: string) => parseISO(d));
+      } catch (e) {}
+    }
+
     const now = new Date();
-    return [startOfMonth(now), startOfMonth(addMonths(now, 1))];
+    let start = startOfMonth(now);
+    let end = startOfMonth(addMonths(now, 1));
+
+    if (savedMonths.length > 0) {
+      start = savedMonths[0];
+      end = savedMonths[savedMonths.length - 1];
+    }
+
+    if (transactions.length > 0) {
+      const dates = transactions.map(t => parseISO(t.date));
+      const minTransactionDate = startOfMonth(new Date(Math.min(...dates.map(d => d.getTime()))));
+      const maxTransactionDate = startOfMonth(new Date(Math.max(...dates.map(d => d.getTime()))));
+
+      if (minTransactionDate < start) start = minTransactionDate;
+      if (maxTransactionDate > end) end = maxTransactionDate;
+    }
+
+    if (start > startOfMonth(now)) start = startOfMonth(now);
+    if (end < startOfMonth(addMonths(now, 1))) end = startOfMonth(addMonths(now, 1));
+
+    const generatedMonths: Date[] = [];
+    let current = start;
+    while (current <= end) {
+      generatedMonths.push(current);
+      current = startOfMonth(addMonths(current, 1));
+    }
+    
+    return generatedMonths;
   });
+
+  useEffect(() => {
+    localStorage.setItem('cashFlow_months', JSON.stringify(months.map(m => m.toISOString())));
+  }, [months]);
+
+  useEffect(() => {
+    if (transactions.length === 0) return;
+    
+    setMonths(prev => {
+      let start = prev[0];
+      let end = prev[prev.length - 1];
+      
+      const dates = transactions.map(t => parseISO(t.date));
+      const times = dates.map(d => d.getTime());
+      const minTransactionDate = startOfMonth(new Date(Math.min(...times)));
+      const maxTransactionDate = startOfMonth(new Date(Math.max(...times)));
+
+      let changed = false;
+      if (minTransactionDate < start) {
+        start = minTransactionDate;
+        changed = true;
+      }
+      if (maxTransactionDate > end) {
+        end = maxTransactionDate;
+        changed = true;
+      }
+
+      if (!changed) return prev;
+
+      const generatedMonths: Date[] = [];
+      let current = start;
+      while (current <= end) {
+        generatedMonths.push(current);
+        current = startOfMonth(addMonths(current, 1));
+      }
+      
+      return generatedMonths;
+    });
+  }, [transactions]);
 
   const loadPreviousMonth = () => {
     setMonths(prev => [startOfMonth(addMonths(prev[0], -1)), ...prev]);
@@ -590,9 +663,9 @@ export default function App() {
               className="text-lg font-bold tracking-tight mb-0.5 select-none hover:text-[#007AFF] transition-colors cursor-pointer"
               onClick={handleTitleClick}
             >
-              {t('현금 흐름')}
+              {t('Balance Calendar')}
             </h1>
-            <p className="text-[10px] text-gray-500">{t('Cash Flow Simulation')}</p>
+            <p className="text-[10px] text-gray-500">{t('Finance Simulation')}</p>
           </div>
           <button 
             className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
@@ -726,9 +799,9 @@ export default function App() {
           <div className="hidden lg:flex items-center justify-between w-full max-w-5xl mb-6">
             <div className="flex flex-col">
               <h1 className="text-xl font-bold tracking-tight select-none cursor-pointer hover:text-[#007AFF] transition-colors" onClick={handleTitleClick}>
-                {t('현금 흐름')}
+              {t('Balance Calendar')}
               </h1>
-              <p className="text-[10px] text-gray-500">{t('Cash Flow Simulation')}</p>
+              <p className="text-[10px] text-gray-500">{t('Finance Simulation')}</p>
             </div>
             
             <div className="flex items-center gap-3">
