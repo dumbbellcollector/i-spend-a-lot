@@ -357,7 +357,7 @@ const archivePastRecurringInstances = (
               date: day.toISOString(),
               type: rule.type,
               amount: rule.amount,
-              memo: rule.memo ? `${rule.memo} (반복)` : '반복 항목',
+              memo: rule.memo ? `${rule.memo} (고정)` : '고정 지출 항목',
               isActive: true,
               recurringId: rule.id,
               isRecurring: true
@@ -713,13 +713,13 @@ export default function App() {
       setInitialBalance(0);
     }
 
-    // 2. 미래 반복 내역 유지 (Keep Future Recurring Rules)
+    // 2. 미래 고정 지출 규칙 유지 (Keep Future Recurring Rules)
     if (!keepFutureRecurringRules) {
       setRecurringTransactions([]);
       setRecurringExceptions([]);
     }
 
-    // 3. 과거 반복 내역 유지 (Keep Past Recurring Records)
+    // 3. 과거 고정 지출 내역 유지 (Keep Past Recurring Records)
     if (!keepPastRecurringRecords) {
       setTransactions([]);
     } else {
@@ -991,7 +991,7 @@ export default function App() {
       id: 'rec-' + Math.random().toString(36).substr(2, 9),
       type: recType,
       amount: rawAmount,
-      memo: recMemo || (recType === 'income' ? '반복 수입' : '반복 지출'),
+      memo: recMemo || (recType === 'income' ? '고정 수입' : '고정 지출'),
       startDate: recStartDate,
       endDate: recEndDate || undefined,
       frequency: recFrequency,
@@ -1244,61 +1244,61 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-full bg-m3-surface font-sans text-slate-800 overflow-hidden antialiased">
       {/* Mobile Glass Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-slate-50/85 backdrop-blur-md border-b border-slate-200/40 py-3.5 px-6 flex justify-between items-center">
-        <div className="flex flex-col">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-slate-50/85 backdrop-blur-md border-b border-slate-200/40 py-1.5 px-4 h-11 flex justify-between items-center">
+        <div className="flex items-baseline gap-1.5 min-w-0">
           <h1 
-            className="text-base font-extrabold text-slate-900 tracking-tight select-none cursor-pointer hover:text-m3-primary transition-colors"
+            className="text-sm font-black text-slate-900 tracking-tight select-none cursor-pointer hover:text-m3-primary transition-colors truncate"
             onClick={handleTitleClick}
           >
             {t('Balance Calendar')}
           </h1>
-          <p className="text-[9.5px] text-slate-400 font-medium">{t('Finance Simulation')}</p>
+          <p className="text-[8.5px] text-slate-400 font-bold shrink-0">{t('Finance Simulation')}</p>
         </div>
         <button 
           onClick={() => setIsHelpModalOpen(true)}
-          className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-full transition-all active:scale-95"
+          className="p-1.5 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-full transition-all active:scale-95 shrink-0"
         >
-          <HelpCircle className="w-4 h-4" />
+          <HelpCircle className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Mobile Material 3 Bottom Navigation Dock */}
-      <div className="lg:hidden fixed bottom-6 left-4 right-4 z-40 pointer-events-none flex justify-center">
-        <div className="bg-m3-surface/95 backdrop-blur-md w-full max-w-sm rounded-full border border-m3-surface-container-high shadow-xs border border-m3-outline-variant border border-m3-outline-variant p-2 flex items-center justify-around pointer-events-auto">
+      <div className="lg:hidden fixed bottom-3 left-3 right-3 z-40 pointer-events-none flex justify-center">
+        <div className="bg-m3-surface/95 backdrop-blur-md w-full max-w-sm rounded-full border border-m3-surface-container-high shadow-xs border-m3-outline-variant p-1 flex items-center justify-around pointer-events-auto">
           <button 
             type="button"
             onClick={() => {
               if (activeTab === 'calendar') handleTitleClick();
               else setActiveTab('calendar');
             }}
-            className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 transition-all"
           >
-            <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${activeTab === 'calendar' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
-              <CalendarIcon className="w-5 h-5 shrink-0" />
+            <div className={`flex items-center justify-center px-4 py-1.5 rounded-full duration-200 ${activeTab === 'calendar' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
+              <CalendarIcon className="w-4.5 h-4.5 shrink-0" />
             </div>
-            <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">달력</span>
+            <span className="text-[8.5px] font-black mt-0.5 text-slate-600">달력</span>
           </button>
           
           <button 
             type="button"
             onClick={() => setActiveTab('recurring')}
-            className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 transition-all"
           >
-            <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${activeTab === 'recurring' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
-              <Repeat className="w-5 h-5 shrink-0" />
+            <div className={`flex items-center justify-center px-4 py-1.5 rounded-full duration-200 ${activeTab === 'recurring' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
+              <Repeat className="w-4.5 h-4.5 shrink-0" />
             </div>
-            <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">반복관리</span>
+            <span className="text-[8.5px] font-black mt-0.5 text-slate-600">고정지출</span>
           </button>
 
           <button 
             type="button"
             onClick={() => setActiveTab('settings')}
-            className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
+            className="flex flex-col items-center justify-center flex-1 py-0.5 transition-all"
           >
-            <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${activeTab === 'settings' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
-              <Settings className="w-5 h-5 shrink-0" />
+            <div className={`flex items-center justify-center px-4 py-1.5 rounded-full duration-200 ${activeTab === 'settings' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
+              <Settings className="w-4.5 h-4.5 shrink-0" />
             </div>
-            <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">설정</span>
+            <span className="text-[8.5px] font-black mt-0.5 text-slate-600">설정</span>
           </button>
 
           {(() => {
@@ -1308,12 +1308,12 @@ export default function App() {
                <button 
                  type="button"
                  onClick={() => setIsDeathValleyModalOpen(true)}
-                 className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
+                 className="flex flex-col items-center justify-center flex-1 py-0.5 transition-all"
                >
-                 <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${isNegative ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                   <TrendingDown className="w-5 h-5 shrink-0" />
+                 <div className={`flex items-center justify-center px-4 py-1.5 rounded-full duration-200 ${isNegative ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                   <TrendingDown className="w-4.5 h-4.5 shrink-0" />
                  </div>
-                 <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">{isNegative ? '추경필요' : '건전대원'}</span>
+                 <span className="text-[8.5px] font-black mt-0.5 text-slate-600">{isNegative ? '추경필요' : '건전대원'}</span>
                </button>
              ) : null;
            })()}
@@ -1426,7 +1426,7 @@ export default function App() {
                             >
                               <div className="flex flex-col min-w-0 pr-2">
                                 <span className={`text-[12px] font-extrabold text-slate-800 truncate flex items-center gap-1.5 ${!tx.isActive ? 'line-through text-slate-400' : ''}`}>
-                                  {tx.id.startsWith('dynamic-') && <span className="text-m3-primary font-bold shrink-0 text-[10px]" title="반복 발생 항목">🔁</span>}
+                                  {tx.id.startsWith('dynamic-') && <span className="text-m3-primary font-bold shrink-0 text-[10px]" title="고정 지출/수입 항목">🔁</span>}
                                   {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                                 </span>
                                 <span className={`text-[11px] font-black mt-0.5 tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-600'}`}>
@@ -1467,7 +1467,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* 반복 재정 요약 분석 카드 */}
+                  {/* 고정 지출/수입 요약 분석 카드 */}
                   <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
                     <div className="absolute right-[-10px] top-[-10px] opacity-10">
                       <Repeat className="w-24 h-24 text-white rotate-12" />
@@ -1477,7 +1477,7 @@ export default function App() {
                         <Wallet className="w-3.5 h-3.5 text-indigo-300" /> 월간 고정 흐름 분석
                       </h4>
                       <p className="text-[11px] text-slate-300/80 mt-1 leading-relaxed">
-                        등록된 모든 반복 규칙의 한 달 기준 환산 요약입니다.
+                        등록된 모든 고정 규칙의 한 달 기준 환산 요약입니다.
                       </p>
                     </div>
 
@@ -1506,11 +1506,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 반복 지출/수입 등록 양식 */}
+                  {/* 고정 지출/수입 등록 양식 */}
                   <section className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 space-y-4 shadow-3xs">
                     <div className="flex justify-between items-center">
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> 반복 내역 추가
+                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> 고정 내역 추가
                       </h3>
                       <span className="text-[10px] text-m3-primary font-bold bg-m3-primary-container/40 px-2 py-0.5 rounded-full">
                         시뮬레이터 반영
@@ -1537,7 +1537,7 @@ export default function App() {
 
                     {/* 추천 템플릿 (원클릭 레이아웃) */}
                     <div className="space-y-1.5">
-                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">추천 반복 항목 (원클릭 입력)</label>
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">추천 고정 항목 (원클릭 입력)</label>
                       <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-200">
                         {(recType === 'income' 
                           ? [
@@ -1624,7 +1624,7 @@ export default function App() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">반복 주기</label>
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">발생 주기</label>
                       <select
                         value={recFrequency}
                         onChange={(e) => setRecFrequency(e.target.value as FrequencyType)}
@@ -1639,7 +1639,7 @@ export default function App() {
 
                     {recFrequency === 'custom' && (
                       <div className="space-y-1">
-                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">반복 간격 (일 단위)</label>
+                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">발생 간격 (일 단위)</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -1658,11 +1658,11 @@ export default function App() {
                       onClick={addRecurringRule}
                       className="w-full py-2.5 bg-m3-primary text-white rounded-full text-xs font-extrabold hover:bg-m3-primary/90 transition-colors active:scale-95 shadow-3xs"
                     >
-                      반복 규칙 생성하기
+                      고정 규칙 생성하기
                     </button>
                   </section>
 
-                  {/* 활성 반복 규칙 관리 목록 & 세그먼트 필터 */}
+                  {/* 활성 고정 규칙 관리 목록 & 세그먼트 필터 */}
                   <section className="space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -1744,7 +1744,7 @@ export default function App() {
 
                       {recurringTransactions.filter(rule => recFilter === 'all' || rule.type === recFilter).length === 0 && (
                         <div className="text-center py-10 text-xs text-slate-400 font-medium italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 px-4">
-                          조건에 부합하는 반복 규칙이 없습니다.
+                          조건에 부합하는 고정 규칙이 없습니다.
                         </div>
                       )}
                     </div>
@@ -1785,7 +1785,7 @@ export default function App() {
           </div>
         </aside>
 
-        <main className={`flex-1 overflow-y-auto px-4 pt-20 pb-8 lg:p-8 flex-col items-center bg-m3-surface relative ${activeTab === 'calendar' ? 'flex' : 'hidden lg:flex'}`}>
+        <main className={`flex-1 overflow-y-auto px-4 pt-13 pb-20 lg:p-8 flex-col items-center bg-m3-surface relative ${activeTab === 'calendar' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Main Desktop Header */}
           <div className="hidden lg:flex items-center justify-between w-full max-w-5xl mb-6">
             <div className="flex flex-col">
@@ -1921,7 +1921,7 @@ export default function App() {
                     >
                       <div className={`flex flex-col min-w-0 pr-2 ${!tx.isActive ? 'opacity-40' : ''}`}>
                         <span className={`text-[13px] font-semibold truncate flex items-center gap-1.5 ${!tx.isActive ? 'line-through' : ''}`}>
-                          {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[11px]" title="반복 발생 항목">🔁</span>}
+                          {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[11px]" title="고정 지출/수입 항목">🔁</span>}
                           {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                         </span>
                         <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-m3-primary' : 'text-m3-error'}`}>
@@ -2157,8 +2157,8 @@ export default function App() {
 
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-bold text-gray-800">미래 반복 내역 유지</span>
-                        <span className="text-[10px] text-gray-400 leading-normal">앞으로 자동 발생할 지출/수입 반복 규칙을 지우지 않습니다.</span>
+                        <span className="text-xs font-bold text-gray-800">미래 고정 규칙 유지</span>
+                        <span className="text-[10px] text-gray-400 leading-normal">앞으로 자동 발생할 지출/수입 고정 규칙을 지우지 않습니다.</span>
                       </div>
                       <button
                         type="button"
@@ -2175,8 +2175,8 @@ export default function App() {
 
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-bold text-gray-800">과거 반복 내역 유지</span>
-                        <span className="text-[10px] text-gray-400 leading-normal">이미 달력 상에 확정 생성된 반복 발생 가계 내역들을 보존합니다.</span>
+                        <span className="text-xs font-bold text-gray-800">과거 고정 내역 유지</span>
+                        <span className="text-[10px] text-gray-400 leading-normal">이미 달력 상에 확정 생성된 고정 발생 가계 내역들을 보존합니다.</span>
                       </div>
                       <button
                         type="button"
