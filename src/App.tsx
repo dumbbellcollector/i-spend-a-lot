@@ -38,7 +38,10 @@ import {
   Settings,
   HelpCircle,
   TrendingDown,
-  AlertTriangle
+  AlertTriangle,
+  Repeat,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
@@ -56,6 +59,28 @@ interface Transaction {
   amount: number;
   memo: string;
   isActive: boolean;
+  recurringId?: string; // ID of the recurring transaction series (if archived)
+  isRecurring?: boolean; // Flag to identify recurring transactions
+}
+
+type FrequencyType = 'daily' | 'weekly' | 'monthly' | 'custom';
+
+interface RecurringTransaction {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  memo: string;
+  startDate: string; // yyyy-MM-dd
+  endDate?: string; // yyyy-MM-dd, optional
+  frequency: FrequencyType;
+  customInterval?: number; // every X days
+}
+
+interface RecurringException {
+  recurringId: string;
+  date: string; // yyyy-MM-dd
+  isActive?: boolean;  // false if toggled off
+  isDeleted?: boolean; // true if completely deleted from that day
 }
 
 // --- Utils ---
@@ -184,6 +209,179 @@ const deserializeDataV2 = (serialized: string): { initialBalance: number; transa
   return { initialBalance, transactions: transactionsList };
 };
 
+// --- Recurring Rules Helpers ---
+
+const getOccurrenceOnDate = (rule: RecurringTransaction, date: Date): boolean => {
+  const ruleStart = parseISO(rule.startDate);
+  const dStart = new Date(ruleStart.getFullYear(), ruleStart.getMonth(), ruleStart.getDate());
+  const dTarget = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  
+  if (dTarget < dStart) return false;
+  if (rule.endDate) {
+    const ruleEnd = parseISO(rule.endDate);
+    const dEndClean = new Date(ruleEnd.getFullYear(), ruleEnd.getMonth(), ruleEnd.getDate());
+    if (dTarget > dEndClean) return false;
+  }
+  
+  const diffTime = dTarget.getTime() - dStart.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  
+  switch (rule.frequency) {
+    case 'daily':
+      return true;
+    case 'weekly':
+      return diffDays % 7 === 0;
+    case 'custom': {
+      const interval = rule.customInterval || 1;
+      return diffDays % interval === 0;
+    }
+    case 'monthly': {
+      const startDay = ruleStart.getDate();
+      const targetMonthLastDay = new Date(dTarget.getFullYear(), dTarget.getMonth() + 1, 0).getDate();
+      const expectedDay = Math.min(startDay, targetMonthLastDay);
+      return dTarget.getDate() === expectedDay;
+    }
+    default:
+      return false;
+  }
+};
+
+const getTransactionsForDate = (
+  date: Date,
+  txList: Transaction[],
+  rules: RecurringTransaction[],
+  exceptions: RecurringException[]
+): Transaction[] => {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  const currentMonthStart = startOfMonth(new Date());
+
+  // 1. Filter standard manual & archived transactions for this date
+  const standardTxs = txList.filter(t => {
+    try {
+      return isSameDay(parseISO(t.date), date);
+    } catch (e) {
+      return false;
+    }
+  });
+
+  // 2. If the date is in a past month, we only return the standard transactions (which include any archived ones)
+  if (date < currentMonthStart) {
+    return standardTxs;
+  }
+
+  // 3. For current/future dates, we also evaluate the recurring transactions
+  const dynamicTxs: Transaction[] = [];
+
+  rules.forEach(rule => {
+    if (getOccurrenceOnDate(rule, date)) {
+      const exception = exceptions.find(e => e.recurringId === rule.id && e.date === dateStr);
+      
+      if (exception) {
+        if (exception.isDeleted) {
+          return;
+        }
+        if (exception.isActive === false) {
+          dynamicTxs.push({
+            id: `dynamic-${rule.id}-${dateStr}`,
+            date: date.toISOString(),
+            type: rule.type,
+            amount: rule.amount,
+            memo: rule.memo,
+            isActive: false,
+            recurringId: rule.id,
+            isRecurring: true
+          });
+          return;
+        }
+      }
+
+      const hasStandalone = standardTxs.some(t => t.recurringId === rule.id);
+      if (hasStandalone) return;
+
+      dynamicTxs.push({
+        id: `dynamic-${rule.id}-${dateStr}`,
+        date: date.toISOString(),
+        type: rule.type,
+        amount: rule.amount,
+        memo: rule.memo,
+        isActive: true,
+        recurringId: rule.id,
+        isRecurring: true
+      });
+    }
+  });
+
+  return [...standardTxs, ...dynamicTxs];
+};
+
+const archivePastRecurringInstances = (
+  rules: RecurringTransaction[],
+  exceptions: RecurringException[],
+  currentTxList: Transaction[]
+): { updatedTxs: Transaction[]; updatedExceptions: RecurringException[] } => {
+  const today = new Date();
+  const currentMonthStart = startOfMonth(today);
+  
+  const updatedTxs = [...currentTxList];
+  let changed = false;
+
+  rules.forEach(rule => {
+    try {
+      const ruleStart = parseISO(rule.startDate);
+      const ruleStartClean = new Date(ruleStart.getFullYear(), ruleStart.getMonth(), ruleStart.getDate());
+      
+      if (ruleStartClean >= currentMonthStart) return;
+
+      const archiveEnd = addDays(currentMonthStart, -1);
+      const daysToCheck = eachDayOfInterval({ start: ruleStartClean, end: archiveEnd });
+      
+      daysToCheck.forEach(day => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        
+        if (getOccurrenceOnDate(rule, day)) {
+          const exception = exceptions.find(e => e.recurringId === rule.id && e.date === dateStr);
+          
+          if (exception && exception.isDeleted) return;
+
+          const alreadyExists = updatedTxs.some(t => {
+            return t.recurringId === rule.id && isSameDay(parseISO(t.date), day);
+          });
+
+          if (!alreadyExists) {
+            if (exception && exception.isActive === false) {
+              return;
+            }
+            
+            const archivedTx: Transaction = {
+              id: `archived-${rule.id}-${dateStr}`,
+              date: day.toISOString(),
+              type: rule.type,
+              amount: rule.amount,
+              memo: rule.memo ? `${rule.memo} (반복)` : '반복 항목',
+              isActive: true,
+              recurringId: rule.id,
+              isRecurring: true
+            };
+            updatedTxs.push(archivedTx);
+            changed = true;
+          }
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  return { updatedTxs, updatedExceptions: exceptions };
+};
+
+const parseDynamicId = (id: string): { ruleId: string; dateStr: string } => {
+  const cleanId = id.replace('dynamic-', '');
+  const dateStr = cleanId.slice(-10); // yyyy-MM-dd is always 10 characters
+  const ruleId = cleanId.slice(0, -11); // everything before that last hyphen
+  return { ruleId, dateStr };
+};
+
 // --- Components ---
 
 export default function App() {
@@ -196,6 +394,21 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Recurring Transactions and Exceptions States
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>(() => {
+    const saved = localStorage.getItem('cashFlow_recurringTransactions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [recurringExceptions, setRecurringExceptions] = useState<RecurringException[]>(() => {
+    const saved = localStorage.getItem('cashFlow_recurringExceptions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [activeTab, setActiveTab] = useState<'settings' | 'calendar' | 'recurring'>('calendar');
+  const [sidebarTab, setSidebarTab] = useState<'detail' | 'recurring'>('detail');
+  const [editingRecurringScope, setEditingRecurringScope] = useState<'instance' | 'series'>('instance');
+  const [deletingDynamicId, setDeletingDynamicId] = useState<string | null>(null);
+
   useEffect(() => {
     localStorage.setItem('cashFlow_initialBalance', initialBalance.toString());
   }, [initialBalance]);
@@ -204,11 +417,39 @@ export default function App() {
     localStorage.setItem('cashFlow_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
+  useEffect(() => {
+    localStorage.setItem('cashFlow_recurringTransactions', JSON.stringify(recurringTransactions));
+  }, [recurringTransactions]);
+
+  useEffect(() => {
+    localStorage.setItem('cashFlow_recurringExceptions', JSON.stringify(recurringExceptions));
+  }, [recurringExceptions]);
+
+  // Archive past recurring instances at startup
+  useEffect(() => {
+    const result = archivePastRecurringInstances(recurringTransactions, recurringExceptions, transactions);
+    if (result.updatedTxs.length !== transactions.length) {
+      setTransactions(result.updatedTxs);
+    }
+  }, []);
+
+  // Sync activeTab with sidebarTab for mobile vs desktop switching
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      setSidebarTab('detail');
+    } else if (activeTab === 'recurring') {
+      setSidebarTab('recurring');
+    }
+  }, [activeTab]);
+
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'settings' | 'calendar'>('calendar');
+  const [keepInitialBalance, setKeepInitialBalance] = useState(false);
+  const [keepFutureRecurringRules, setKeepFutureRecurringRules] = useState(false);
+  const [keepPastRecurringRecords, setKeepPastRecurringRecords] = useState(false);
+  const [isResetOptionsExpanded, setIsResetOptionsExpanded] = useState(false);
   const [isDataSyncModalOpen, setIsDataSyncModalOpen] = useState(false);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [dataSyncMode, setDataSyncMode] = useState<'export' | 'import'>('export');
@@ -239,6 +480,7 @@ export default function App() {
       '지출': '소모',
       '내용 (선택)': '사연 (선택)',
       '금액': '액수',
+      '날짜': '공작 날자',
       '취소': '무효화',
       '저장하기': '보존하기',
       '삭제': '숙청',
@@ -279,6 +521,15 @@ export default function App() {
   const [formAmount, setFormAmount] = useState<string>('');
   const [formMemo, setFormMemo] = useState<string>('');
   const [formDate, setFormDate] = useState<Date>(new Date());
+
+  // Recurring creation form state
+  const [recType, setRecType] = useState<TransactionType>('expense');
+  const [recAmount, setRecAmount] = useState<string>('');
+  const [recMemo, setRecMemo] = useState<string>('');
+  const [recStartDate, setRecStartDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
+  const [recEndDate, setRecEndDate] = useState<string>('');
+  const [recFrequency, setRecFrequency] = useState<FrequencyType>('monthly');
+  const [recCustomInterval, setRecCustomInterval] = useState<number>(3);
 
   const [months, setMonths] = useState<Date[]>(() => {
     let savedMonths: Date[] = [];
@@ -427,8 +678,25 @@ export default function App() {
   };
 
   const handleReset = () => {
-    setTransactions([]);
-    setInitialBalance(1000000);
+    // 1. 기초 자산 유지 (Keep Initial Balance)
+    if (!keepInitialBalance) {
+      setInitialBalance(0);
+    }
+
+    // 2. 미래 반복 내역 유지 (Keep Future Recurring Rules)
+    if (!keepFutureRecurringRules) {
+      setRecurringTransactions([]);
+      setRecurringExceptions([]);
+    }
+
+    // 3. 과거 반복 내역 유지 (Keep Past Recurring Records)
+    if (!keepPastRecurringRecords) {
+      setTransactions([]);
+    } else {
+      // Preserve transactions where isRecurring is true, delete false or undefined
+      setTransactions(prev => prev.filter(t => t.isRecurring === true));
+    }
+
     const now = new Date();
     setMonths([startOfMonth(now), startOfMonth(addMonths(now, 1))]);
     setIsResetModalOpen(false);
@@ -536,6 +804,9 @@ export default function App() {
       setFormAmount(new Intl.NumberFormat('ko-KR').format(transaction.amount));
       setFormMemo(transaction.memo);
       setFormDate(parseISO(transaction.date));
+      if (transaction.id.startsWith('dynamic-')) {
+        setEditingRecurringScope('instance');
+      }
     } else {
       setEditingId(null);
       setFormType(defaultType || 'expense');
@@ -552,10 +823,55 @@ export default function App() {
     if (!rawAmount || isNaN(rawAmount)) return;
 
     if (editingId) {
-      setTransactions(transactions.map(t => 
-        t.id === editingId ? { ...t, type: formType, amount: rawAmount, memo: formMemo } : t
-      ));
+      if (editingId.startsWith('dynamic-')) {
+        const { ruleId, dateStr } = parseDynamicId(editingId);
+
+        if (editingRecurringScope === 'instance') {
+          // 1. Convert this dynamic occurrence to standard standalone transaction
+          const newTransaction: Transaction = {
+            id: Math.random().toString(36).substr(2, 9),
+            date: formDate.toISOString(),
+            type: formType,
+            amount: rawAmount,
+            memo: formMemo,
+            isActive: true,
+            recurringId: ruleId,
+            isRecurring: true
+          };
+          setTransactions([...transactions, newTransaction]);
+
+          // 2. Add full exception so dynamic generator skips it on this day
+          setRecurringExceptions(prev => [...prev, { recurringId: ruleId, date: dateStr, isDeleted: true }]);
+        } else {
+          // Edit entire series
+          setRecurringTransactions(prev => prev.map(r => 
+            r.id === ruleId ? { ...r, type: formType, amount: rawAmount, memo: formMemo } : r
+          ));
+        }
+      } else {
+        // Standard transaction edit
+        const existingTx = transactions.find(t => t.id === editingId);
+        if (existingTx && existingTx.recurringId) {
+          const oldDateStr = format(parseISO(existingTx.date), 'yyyy-MM-dd');
+          const newDateStr = format(formDate, 'yyyy-MM-dd');
+          if (oldDateStr !== newDateStr) {
+            // Yes! The date has changed. Add exception for the old date so the recurring item of the series is deleted/hidden on that day
+            setRecurringExceptions(prev => {
+              const exists = prev.some(e => e.recurringId === existingTx.recurringId && e.date === oldDateStr && e.isDeleted);
+              if (!exists) {
+                return [...prev, { recurringId: existingTx.recurringId!, date: oldDateStr, isDeleted: true }];
+              }
+              return prev;
+            });
+          }
+        }
+
+        setTransactions(transactions.map(t => 
+          t.id === editingId ? { ...t, type: formType, amount: rawAmount, memo: formMemo, date: formDate.toISOString() } : t
+        ));
+      }
     } else {
+      // Create new standard transaction
       const newTransaction: Transaction = {
         id: Math.random().toString(36).substr(2, 9),
         date: formDate.toISOString(),
@@ -574,13 +890,116 @@ export default function App() {
   };
 
   const deleteTransaction = (id: string) => {
-    setTransactions(transactions.filter(t => t.id !== id));
+    if (id.startsWith('dynamic-')) {
+      setDeletingDynamicId(id);
+    } else {
+      setTransactions(transactions.filter(t => t.id !== id));
+    }
+  };
+
+  const confirmDeleteDynamicSegment = (scope: 'instance' | 'series') => {
+    if (!deletingDynamicId) return;
+    const { ruleId, dateStr } = parseDynamicId(deletingDynamicId);
+
+    if (scope === 'instance') {
+      setRecurringExceptions(prev => [...prev, { recurringId: ruleId, date: dateStr, isDeleted: true }]);
+    } else {
+      setRecurringTransactions(prev => prev.filter(r => r.id !== ruleId));
+      setRecurringExceptions(prev => prev.filter(e => e.recurringId !== ruleId));
+    }
+    setDeletingDynamicId(null);
   };
 
   const toggleTransaction = (id: string) => {
-    setTransactions(transactions.map(t => 
-      t.id === id ? { ...t, isActive: !t.isActive } : t
-    ));
+    if (id.startsWith('dynamic-')) {
+      const { ruleId, dateStr } = parseDynamicId(id);
+
+      setRecurringExceptions(prev => {
+        const existingIndex = prev.findIndex(e => e.recurringId === ruleId && e.date === dateStr);
+        if (existingIndex > -1) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            isActive: !updated[existingIndex].isActive
+          };
+          return updated;
+        } else {
+          return [...prev, { recurringId: ruleId, date: dateStr, isActive: false }];
+        }
+      });
+    } else {
+      setTransactions(transactions.map(t => 
+        t.id === id ? { ...t, isActive: !t.isActive } : t
+      ));
+    }
+  };
+
+  // --- Manage Recurring Items Logic ---
+
+  const addRecurringRule = () => {
+    const rawAmount = Number(recAmount.replace(/,/g, ''));
+    if (!rawAmount || isNaN(rawAmount)) {
+      alert('금액을 올바르게 입력해주세요.');
+      return;
+    }
+    if (!recStartDate) {
+      alert('시작일을 입력해주세요.');
+      return;
+    }
+
+    const newRule: RecurringTransaction = {
+      id: 'rec-' + Math.random().toString(36).substr(2, 9),
+      type: recType,
+      amount: rawAmount,
+      memo: recMemo || (recType === 'income' ? '반복 수입' : '반복 지출'),
+      startDate: recStartDate,
+      endDate: recEndDate || undefined,
+      frequency: recFrequency,
+      customInterval: recFrequency === 'custom' ? recCustomInterval : undefined
+    };
+
+    setRecurringTransactions(prev => [...prev, newRule]);
+
+    setRecAmount('');
+    setRecMemo('');
+    setRecStartDate(format(new Date(), 'yyyy-MM-dd'));
+    setRecEndDate('');
+    setRecFrequency('monthly');
+    setRecCustomInterval(3);
+
+    const result = archivePastRecurringInstances([...recurringTransactions, newRule], recurringExceptions, transactions);
+    if (result.updatedTxs.length !== transactions.length) {
+      setTransactions(result.updatedTxs);
+    }
+  };
+
+  const deleteRecurringRule = (id: string) => {
+    setRecurringTransactions(prev => prev.filter(r => r.id !== id));
+    setRecurringExceptions(prev => prev.filter(e => e.recurringId !== id));
+  };
+
+  const getFrequencyLabel = (rule: RecurringTransaction) => {
+    try {
+      const startStr = parseISO(rule.startDate);
+      switch (rule.frequency) {
+        case 'daily':
+          return '매일';
+        case 'weekly': {
+          const dayOfWeek = format(startStr, 'EEEE', { locale: ko });
+          return `매주 ${dayOfWeek}`;
+        }
+        case 'monthly': {
+          const dayOfMonth = startStr.getDate();
+          return `매달 ${dayOfMonth}일`;
+        }
+        case 'custom':
+          return `${rule.customInterval}일마다`;
+        default:
+          return '';
+      }
+    } catch (e) {
+      return '';
+    }
   };
 
   // Calculate daily balances
@@ -594,15 +1013,15 @@ export default function App() {
 
     dayInterval.forEach(day => {
       const dateKey = format(day, 'yyyy-MM-dd');
-      const dayTransactions = transactions.filter(t => 
-        isSameDay(parseISO(t.date), day) && t.isActive
-      );
+      const dayTransactions = getTransactionsForDate(day, transactions, recurringTransactions, recurringExceptions);
 
-      const income = dayTransactions
+      const activeTransactions = dayTransactions.filter(t => t.isActive);
+
+      const income = activeTransactions
         .filter(t => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);
       
-      const expense = dayTransactions
+      const expense = activeTransactions
         .filter(t => t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0);
 
@@ -616,13 +1035,13 @@ export default function App() {
     });
 
     return dailyStats;
-  }, [transactions, initialBalance, months]);
+  }, [transactions, recurringTransactions, recurringExceptions, initialBalance, months]);
 
   const deathValleyInfo = useMemo(() => {
     let minBalance = Infinity;
     let minDate = '';
     
-    Object.entries(simulationData).forEach(([date, data]) => {
+    Object.entries(simulationData).forEach(([date, data]: [string, any]) => {
       if (data.balance < minBalance) {
         minBalance = data.balance;
         minDate = date;
@@ -634,7 +1053,7 @@ export default function App() {
   }, [simulationData]);
 
   const deathValleyChartData = useMemo(() => {
-    const dataPoints = Object.entries(simulationData).map(([date, data]) => ({
+    const dataPoints = Object.entries(simulationData).map(([date, data]: [string, any]) => ({
       date,
       dateLabel: format(parseISO(date), 'M/d'),
       balance: data.balance
@@ -697,7 +1116,7 @@ export default function App() {
             const isSelected = isSameDay(day, selectedDate);
             const isToday = isSameDay(day, new Date());
             const isInMonth = isSameMonth(day, month);
-            const dayTransactions = transactions.filter(t => isSameDay(parseISO(t.date), day));
+            const dayTransactions = getTransactionsForDate(day, transactions, recurringTransactions, recurringExceptions);
 
             return (
               <div
@@ -772,6 +1191,12 @@ export default function App() {
           >
             <Settings className="w-3.5 h-3.5" /> 설정
           </button>
+          <button 
+            onClick={() => setActiveTab('recurring')}
+            className={`pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 ${activeTab === 'recurring' ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}
+          >
+            <Repeat className="w-3.5 h-3.5" /> 반복 관리
+          </button>
           {(() => {
              const finalBalance = simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance;
              const isNegative = finalBalance < 0;
@@ -796,126 +1221,311 @@ export default function App() {
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Sidebar - Drawer on mobile, sidebar on desktop */}
-        <aside 
+         <aside 
           className={`
-            w-full lg:w-72 bg-white border-r border-[#E5E7EB] flex-col p-6 pt-20 lg:pt-6
-            ${activeTab === 'settings' ? 'flex overflow-y-auto' : 'hidden lg:flex overflow-hidden'}
+            w-full lg:w-[340px] bg-white border-r border-[#E5E7EB] flex-col p-5 pt-20 lg:pt-6 shrink-0
+            ${(activeTab === 'settings' || activeTab === 'recurring') ? 'flex overflow-y-auto' : 'hidden lg:flex overflow-hidden'}
           `}
         >
           <div className="hidden lg:flex items-center justify-between mb-6">
-          <div className="flex flex-col">
-            <h1 
-              className="text-lg font-bold tracking-tight mb-0.5 select-none hover:text-[#007AFF] transition-colors cursor-pointer"
-              onClick={handleTitleClick}
+            <div className="flex flex-col">
+              <h1 
+                className="text-lg font-bold tracking-tight mb-0.5 select-none hover:text-[#007AFF] transition-colors cursor-pointer"
+                onClick={handleTitleClick}
+              >
+                {t('Balance Calendar')}
+              </h1>
+              <p className="text-[10px] text-gray-500">{t('Finance Simulation')}</p>
+            </div>
+            <button 
+              className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
+              onClick={() => setActiveTab('calendar')}
             >
-              {t('Balance Calendar')}
-            </h1>
-            <p className="text-[10px] text-gray-500">{t('Finance Simulation')}</p>
+              <X className="w-6 h-6" />
+            </button>
           </div>
-          <button 
-            className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
-            onClick={() => setActiveTab('calendar')}
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
 
-        <div className="space-y-6 flex-grow overflow-y-auto pr-1">
-          <section>
-            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">{t('기초 자산 설정')}</label>
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
-                onChange={handleInitialBalanceChange}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-base font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">{isComradeMode ? '억 원' : '₩'}</span>
-            </div>
-          </section>
+          <div className="space-y-6 flex-grow overflow-y-auto pr-1">
+          {/* Segmented Control inside Sidebar on Desktop */}
+          <div className="hidden lg:grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl mb-4 text-xs font-semibold select-none">
+            <button 
+              onClick={() => { setSidebarTab('detail'); setActiveTab('settings'); }}
+              className={`py-1.5 rounded-lg transition-all text-center ${sidebarTab === 'detail' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
+            >
+              기본 설정 및 내역
+            </button>
+            <button 
+              onClick={() => { setSidebarTab('recurring'); setActiveTab('recurring'); }}
+              className={`py-1.5 rounded-lg transition-all text-center ${sidebarTab === 'recurring' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
+            >
+              반복 항목 관리
+            </button>
+          </div>
 
-          <section className="bg-white border border-[#E5E7EB] rounded-xl p-3 space-y-3">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-600">{t('총 수입 (예정)')}</span>
-              <span className="font-semibold text-[#007AFF]">
-                +{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-600">{t('총 지출 (예정)')}</span>
-              <span className="font-semibold text-[#FF3B30]">
-                -{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}
-              </span>
-            </div>
-            <div className="h-px bg-gray-100 my-1"></div>
-            <div className="flex justify-between items-end">
-              <span className="text-sm font-medium flex items-center gap-1">
-                {t('기말 잔액')}
-                <button 
-                  onClick={() => setIsHelpModalOpen(true)}
-                  className="text-gray-400 hover:text-[#007AFF] transition-colors p-0.5"
-                >
-                  <HelpCircle className="w-4 h-4" />
-                </button>
-              </span>
-              <span className="text-base font-bold text-[#1C1C1E]">
-                {formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}
-              </span>
-            </div>
-          </section>
+          {sidebarTab === 'detail' ? (
+            <>
+              <section>
+                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">{t('기초 자산 설정')}</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
+                    onChange={handleInitialBalanceChange}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-base font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">{isComradeMode ? '억 원' : '₩'}</span>
+                </div>
+              </section>
 
-          <div className="hidden lg:block">
-          {selectedDate && (
-            <section>
-              <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 block">
-                {format(selectedDate, 'M월 d일', { locale: ko })} 내역
-              </label>
-              <div className="space-y-3">
-                {transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate)).map(tx => (
-                  <div 
-                    key={tx.id} 
-                    onDoubleClick={() => openForm(selectedDate, tx)}
-                    className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer hover:border-[#007AFF]/30 ${tx.isActive ? 'bg-gray-50 border border-transparent' : 'bg-white border border-gray-100 opacity-40'}`}
-                  >
-                    <div className="flex flex-col min-w-0 pr-2">
-                      <span className={`text-xs font-semibold truncate ${!tx.isActive ? 'line-through' : ''}`}>
-                        {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
-                      </span>
-                      <span className={`text-[10px] font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                        {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button 
-                        onClick={() => toggleTransaction(tx.id)} 
-                        className={`w-8 h-4.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+              <section className="bg-white border border-[#E5E7EB] rounded-xl p-3 space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-600">{t('총 수입 (예정)')}</span>
+                  <span className="font-semibold text-[#007AFF]">
+                    +{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-600">{t('총 지출 (예정)')}</span>
+                  <span className="font-semibold text-[#FF3B30]">
+                    -{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}
+                  </span>
+                </div>
+                <div className="h-px bg-gray-100 my-1"></div>
+                <div className="flex justify-between items-end">
+                  <span className="text-sm font-medium flex items-center gap-1">
+                    {t('기말 잔액')}
+                    <button 
+                      onClick={() => setIsHelpModalOpen(true)}
+                      className="text-gray-400 hover:text-[#007AFF] transition-colors p-0.5"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                    </button>
+                  </span>
+                  <span className="text-base font-bold text-[#1C1C1E]">
+                    {formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}
+                  </span>
+                </div>
+              </section>
+
+              <div className="hidden lg:block">
+              {selectedDate && (
+                <section>
+                  <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 block">
+                    {format(selectedDate, 'M월 d일', { locale: ko })} 내역
+                  </label>
+                  <div className="space-y-3">
+                    {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).map(tx => (
+                      <div 
+                        key={tx.id} 
+                        onDoubleClick={() => openForm(selectedDate, tx)}
+                        className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer border border-transparent hover:border-[#007AFF]/30 ${tx.isActive ? 'bg-gray-50' : 'bg-white border border-gray-100 opacity-40'}`}
                       >
-                        <div className="w-3.5 h-3.5 bg-white rounded-full shadow-sm" />
-                      </button>
-                      <button onClick={() => openForm(selectedDate, tx)} className="p-1 text-gray-400 hover:text-[#007AFF] transition-colors">
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => deleteTransaction(tx.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className={`text-xs font-semibold truncate flex items-center gap-1 ${!tx.isActive ? 'line-through' : ''}`}>
+                            {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[10px]" title="반복 발생 항목">🔁</span>}
+                            {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
+                          </span>
+                          <span className={`text-[10px] font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                            {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); toggleTransaction(tx.id); }} 
+                            className={`w-8 h-4.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                          >
+                            <div className="w-3.5 h-3.5 bg-white rounded-full shadow-sm" />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); openForm(selectedDate, tx); }} 
+                            className="p-1 text-gray-400 hover:text-[#007AFF] transition-colors"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }} 
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).length === 0 && (
+                      <div className="text-center py-6 text-xs text-gray-400 italic">
+                        내역이 없습니다.
+                      </div>
+                    )}
                   </div>
-                ))}
-                {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).length === 0 && (
-                  <div className="text-center py-6 text-xs text-gray-400 italic">
-                    내역이 없습니다.
+                </section>
+              )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 반복 지출/수입 등록 양식 */}
+              <section className="bg-gray-50/50 border border-gray-150 p-4 rounded-xl space-y-4">
+                <h3 className="text-xs font-bold text-gray-850 uppercase tracking-wider flex items-center gap-1.5">
+                  <Repeat className="w-3.5 h-3.5 text-blue-600 animate-spin-slow" /> 반복 내역 가입
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-1 bg-gray-200/60 p-1 rounded-xl text-xs font-semibold select-none">
+                  <button 
+                    type="button"
+                    onClick={() => setRecType('income')}
+                    className={`py-1.5 rounded-lg transition-colors text-center ${recType === 'income' ? 'bg-[#007AFF] text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                  >
+                    수입
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setRecType('expense')}
+                    className={`py-1.5 rounded-lg transition-colors text-center ${recType === 'expense' ? 'bg-[#FF3B30] text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                  >
+                    지출
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-gray-400 font-bold uppercase block">금액</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={recAmount}
+                      onChange={(e) => {
+                        const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                        setRecAmount(numericValue ? Number(numericValue).toLocaleString('ko-KR') : '');
+                      }}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">{isComradeMode ? '억 원' : '₩'}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-gray-400 font-bold uppercase block">내용 (메모)</label>
+                  <input
+                    type="text"
+                    placeholder={recType === 'income' ? '수입 사연 기입' : '지출 사연 기입'}
+                    value={recMemo}
+                    onChange={(e) => setRecMemo(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase block">시작일</label>
+                    <input
+                      type="date"
+                      value={recStartDate}
+                      onChange={(e) => setRecStartDate(e.target.value)}
+                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase block">종료일 (옵션)</label>
+                    <input
+                      type="date"
+                      value={recEndDate}
+                      onChange={(e) => setRecEndDate(e.target.value)}
+                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-gray-400 font-bold uppercase block">반복 주기</label>
+                  <select
+                    value={recFrequency}
+                    onChange={(e) => setRecFrequency(e.target.value as FrequencyType)}
+                    className="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="daily">매일 (Daily)</option>
+                    <option value="weekly">매주 (Weekly)</option>
+                    <option value="monthly">매달 (Monthly)</option>
+                    <option value="custom">직접 입력 (Custom interval)</option>
+                  </select>
+                </div>
+
+                {recFrequency === 'custom' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase block">반복 간격 (일 단위)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        value={recCustomInterval}
+                        onChange={(e) => setRecCustomInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 bg-white border border-gray-200 rounded-lg px-3 py-1 text-xs font-bold text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-semibold text-gray-600">일 마다 발생</span>
+                    </div>
                   </div>
                 )}
-              </div>
-            </section>
+
+                <button
+                  type="button"
+                  onClick={addRecurringRule}
+                  className="w-full py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors active:scale-95"
+                >
+                  반복 규칙 생성하기
+                </button>
+              </section>
+
+              {/* 활성 반복 규칙 관리 목록 */}
+              <section className="space-y-3">
+                <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1 block">
+                  반복 리스트 ({recurringTransactions.length}개)
+                </label>
+                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-0.5">
+                  {recurringTransactions.map(rule => (
+                    <div key={rule.id} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between hover:shadow-xs transition-shadow">
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${rule.type === 'income' ? 'bg-blue-50 text-[#007AFF]' : 'bg-red-50 text-[#FF3B30]'}`}>
+                            {rule.type === 'income' ? '수입' : '지출'}
+                          </span>
+                          <span className="text-xs font-bold text-gray-800 truncate">{rule.memo}</span>
+                        </div>
+                        <div className="text-[10px] font-medium text-gray-400 flex flex-col space-y-0.5">
+                          <span>• 주기: {getFrequencyLabel(rule)}</span>
+                          <span>• 일정: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(영구)'}</span>
+                        </div>
+                        <div className="text-xs font-extrabold text-gray-900 mt-1.5">
+                          {formatCurrency(rule.amount)}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteRecurringRule(rule.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-55 rounded-lg transition-colors shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {recurringTransactions.length === 0 && (
+                    <div className="text-center py-8 text-xs text-gray-400 italic bg-gray-50/40 rounded-xl border border-dashed border-gray-200">
+                      등록된 반복 규칙이 없습니다.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
           )}
-          </div>
         </div>
 
         <div className="pt-6 space-y-2 mt-auto">
           <button 
             onClick={() => {
+              setKeepInitialBalance(false);
+              setKeepFutureRecurringRules(false);
+              setKeepPastRecurringRecords(false);
+              setIsResetOptionsExpanded(false);
               setIsResetModalOpen(true);
             }}
             className="w-full py-3 bg-white text-[#FF3B30] border border-red-100 rounded-xl font-semibold text-sm hover:bg-red-50 transition-colors shadow-sm active:scale-95"
@@ -1036,7 +1646,7 @@ export default function App() {
                   </button>
                 </div>
                 {(() => {
-                  const dayTransactions = transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate) && tx.isActive);
+                  const dayTransactions = getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).filter(tx => tx.isActive);
                   const income = dayTransactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
                   const expense = dayTransactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
                   const total = income - expense;
@@ -1056,7 +1666,7 @@ export default function App() {
 
               <div className="flex-1 overflow-y-auto px-0 py-0 overscroll-contain bg-white pb-6">
                 <div className="divide-y divide-gray-100 border-b border-gray-100">
-                {transactions.filter(tx => isSameDay(parseISO(tx.date), selectedDate)).map(tx => (
+                {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).map(tx => (
                   <div key={tx.id} className="relative bg-gray-50 overflow-hidden">
                     <div className="absolute inset-y-0 right-0 flex items-stretch">
                       <button 
@@ -1074,7 +1684,8 @@ export default function App() {
                       className={`relative flex items-center justify-between p-4 px-6 transition-colors select-none ${tx.isActive ? 'bg-white' : 'bg-gray-100'}`}
                     >
                       <div className={`flex flex-col min-w-0 pr-2 ${!tx.isActive ? 'opacity-40' : ''}`}>
-                        <span className={`text-[13px] font-semibold truncate ${!tx.isActive ? 'line-through' : ''}`}>
+                        <span className={`text-[13px] font-semibold truncate flex items-center gap-1.5 ${!tx.isActive ? 'line-through' : ''}`}>
+                          {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[11px]" title="반복 발생 항목">🔁</span>}
                           {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                         </span>
                         <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
@@ -1093,7 +1704,7 @@ export default function App() {
                     </motion.div>
                   </div>
                 ))}
-                {transactions.filter(t => isSameDay(parseISO(t.date), selectedDate)).length === 0 && (
+                {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).length === 0 && (
                   <div className="text-center py-10 text-sm text-gray-400">
                     등록된 내역이 없습니다.
                   </div>
@@ -1155,6 +1766,20 @@ export default function App() {
               </div>
 
               <div className="space-y-5">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('날짜')}</label>
+                  <input 
+                    type="date"
+                    value={format(formDate, 'yyyy-MM-dd')}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setFormDate(parseISO(e.target.value));
+                      }
+                    }}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all text-gray-800"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">구분</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1225,7 +1850,7 @@ export default function App() {
       <AnimatePresence>
         {isResetModalOpen && (
           <div 
-            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center"
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center p-0 lg:p-4"
             onClick={() => setIsResetModalOpen(false)}
           >
             <motion.div 
@@ -1234,27 +1859,118 @@ export default function App() {
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-lg lg:max-w-sm rounded-t-3xl lg:rounded-2xl shadow-xl p-6 border-t lg:border border-gray-100 text-center pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+              className="bg-white w-full max-w-md rounded-t-3xl lg:rounded-2xl shadow-xl p-6 border-t lg:border border-gray-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
-              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden" />
-              <h3 className="text-lg font-bold mb-2 text-gray-900">
-                {t('데이터 초기화')}
-              </h3>
-              <p className="text-sm text-gray-500 mb-6">
-                {isComradeMode ? '위대한 수령님의 지시로 모든 배급 기록이 처단되며, 돌이킬 수 없소. 진정 혁명하시갔소?' : '입력한 모든 거래 내역과 설정이 삭제되며, 이 작업은 되돌릴 수 없습니다. 정말로 초기화하시겠습니까?'}
-              </p>
-              <div className="flex gap-2">
+              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-5 lg:hidden" />
+              
+              <div className="text-center mb-5">
+                <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <AlertTriangle className="w-6 h-6 text-[#FF3B30]" />
+                </div>
+                <h3 className="text-lg font-extrabold text-gray-900 mb-1.5">
+                  {isComradeMode ? '자료 혁명 단행' : '모든 데이터를 초기화하시겠습니까?'}
+                </h3>
+                <p className="text-xs text-gray-400 leading-relaxed max-w-sm mx-auto font-medium">
+                  {isComradeMode 
+                    ? '배급 기록이 제거되며, 혁명은 돌이킬 수 없소. 아래 옵션으로 보존 대상을 가릴 수 있소.' 
+                    : '초기화 실행 시 복구가 불가능합니다. 아래 옵션을 활성화하여 원하는 데이터만 선택적으로 보존할 수 있습니다.'}
+                </p>
+              </div>
+
+              {/* Accordion - Reset Options Setting */}
+              <div className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => setIsResetOptionsExpanded(!isResetOptionsExpanded)}
+                  className="w-full flex items-center justify-between py-2.5 px-4 bg-gray-50 hover:bg-gray-100 active:bg-gray-200/70 rounded-xl text-xs font-bold text-gray-750 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    ⚙️ {t('초기화 옵션 설정')}
+                  </span>
+                  {isResetOptionsExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  )}
+                </button>
+
+                <motion.div
+                  initial={false}
+                  animate={{ height: isResetOptionsExpanded ? "auto" : 0, opacity: isResetOptionsExpanded ? 1 : 0 }}
+                  transition={{ duration: 0.22, ease: "easeInOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2.5 p-3.5 bg-gray-50/50 rounded-xl border border-gray-100 space-y-3 text-left">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-gray-800">기초 자산 유지</span>
+                        <span className="text-[10px] text-gray-400 leading-normal">현재 설정된 기초 자산 값을 0으로 리셋하지 않고 보존합니다.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setKeepInitialBalance(!keepInitialBalance)}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepInitialBalance ? 'bg-[#34C759]' : 'bg-gray-200'}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-200 ${keepInitialBalance ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="h-px bg-gray-100" />
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-gray-800">미래 반복 내역 유지</span>
+                        <span className="text-[10px] text-gray-400 leading-normal">앞으로 자동 발생할 지출/수입 반복 규칙을 지우지 않습니다.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setKeepFutureRecurringRules(!keepFutureRecurringRules)}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepFutureRecurringRules ? 'bg-[#34C759]' : 'bg-gray-200'}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-200 ${keepFutureRecurringRules ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="h-px bg-gray-100" />
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-gray-800">과거 반복 내역 유지</span>
+                        <span className="text-[10px] text-gray-400 leading-normal">이미 달력 상에 확정 생성된 반복 발생 가계 내역들을 보존합니다.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setKeepPastRecurringRecords(!keepPastRecurringRecords)}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepPastRecurringRecords ? 'bg-[#34C759]' : 'bg-gray-200'}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-200 ${keepPastRecurringRecords ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5">
                 <button 
+                  type="button"
                   onClick={() => setIsResetModalOpen(false)}
-                  className="flex-1 py-3 text-gray-500 text-sm font-semibold hover:bg-gray-50 rounded-lg transition-all"
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-250 text-gray-600 text-xs font-bold rounded-xl transition-all"
                 >
                   {t('취소')}
                 </button>
                 <button 
+                  type="button"
                   onClick={handleReset}
-                  className="flex-[2] py-3 bg-[#FF3B30] text-white rounded-lg font-semibold text-sm hover:bg-red-600 transition-all shadow-sm"
+                  className="flex-[1.5] py-3 bg-[#FF3B30] text-white rounded-xl text-xs font-bold hover:bg-red-650 active:scale-95 transition-all shadow-sm shadow-red-100"
                 >
-                  {isComradeMode ? '혁명수행' : '초기화하기'}
+                  {isComradeMode ? '혁명수행' : '초기화 실행'}
                 </button>
               </div>
             </motion.div>
