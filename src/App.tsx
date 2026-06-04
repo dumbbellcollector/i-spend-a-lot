@@ -737,24 +737,39 @@ export default function App() {
     setSyncError('');
     if (mode === 'export') {
       try {
-        const flatString = serializeDataV2(initialBalance, transactions);
+        const payload = {
+          v: 3,
+          initialBalance,
+          transactions,
+          recurringTransactions,
+          recurringExceptions
+        };
+        const flatString = 'v3|' + JSON.stringify(payload);
         const compressedU8 = pako.deflate(flatString);
         const b64 = uint8ArrayToBase64(compressedU8);
         setSyncText(b64);
       } catch (err) {
-        console.error('V2 export failed, falling back to V1:', err);
-        const minifiedTransactions = transactions.map(t => [
-          t.id,
-          t.date,
-          t.type === 'income' ? 'I' : 'E',
-          t.amount,
-          t.memo,
-          t.isActive ? 1 : 0
-        ]);
-        const data = { v: 1, i: initialBalance, t: minifiedTransactions };
-        const serialized = JSON.stringify(data);
-        const encoded = LZString.compressToEncodedURIComponent(serialized);
-        setSyncText(encoded);
+        console.error('V3 export failed, falling back to V2:', err);
+        try {
+          const flatString = serializeDataV2(initialBalance, transactions);
+          const compressedU8 = pako.deflate(flatString);
+          const b64 = uint8ArrayToBase64(compressedU8);
+          setSyncText(b64);
+        } catch (err2) {
+          console.error('V2 export failed, falling back to V1:', err2);
+          const minifiedTransactions = transactions.map(t => [
+            t.id,
+            t.date,
+            t.type === 'income' ? 'I' : 'E',
+            t.amount,
+            t.memo,
+            t.isActive ? 1 : 0
+          ]);
+          const data = { v: 1, i: initialBalance, t: minifiedTransactions };
+          const serialized = JSON.stringify(data);
+          const encoded = LZString.compressToEncodedURIComponent(serialized);
+          setSyncText(encoded);
+        }
       }
     } else {
       setSyncText('');
@@ -769,14 +784,25 @@ export default function App() {
     }
     const text = syncText.trim();
     
-    // First try V2 (Ultra compressed flat DSL with Pako inflate)
+    // First try V3 or V2 (Compressed formats)
     try {
       const decompressedBinary = base64ToUint8Array(text);
       const inflatedText = pako.inflate(decompressedBinary, { to: 'string' });
-      if (inflatedText.startsWith('v2|')) {
+      if (inflatedText.startsWith('v3|')) {
+        const jsonStr = inflatedText.substring(3);
+        const data = JSON.parse(jsonStr);
+        setInitialBalance(data.initialBalance ?? 0);
+        setTransactions(data.transactions ?? []);
+        setRecurringTransactions(data.recurringTransactions ?? []);
+        setRecurringExceptions(data.recurringExceptions ?? []);
+        setIsDataSyncModalOpen(false);
+        return;
+      } else if (inflatedText.startsWith('v2|')) {
         const { initialBalance: importedInitialBalance, transactions: importedTransactions } = deserializeDataV2(inflatedText);
         setInitialBalance(importedInitialBalance);
         setTransactions(importedTransactions);
+        setRecurringTransactions([]);
+        setRecurringExceptions([]);
         setIsDataSyncModalOpen(false);
         return;
       }
@@ -821,6 +847,8 @@ export default function App() {
 
       setInitialBalance(importedInitialBalance);
       setTransactions(importedTransactions);
+      setRecurringTransactions([]);
+      setRecurringExceptions([]);
       setIsDataSyncModalOpen(false);
     } catch (e) {
       setSyncError('유효하지 않은 데이터입니다.');
