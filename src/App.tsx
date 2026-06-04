@@ -516,6 +516,35 @@ export default function App() {
     return isComradeMode ? `${numStr}억 원` : `${numStr}₩`;
   };
 
+  const formatCalendarCompact = (amount: number) => {
+    const abs = Math.abs(amount);
+    const sign = amount < 0 ? '-' : '';
+    
+    if (isComradeMode) {
+      if (abs >= 10000) {
+        const man = abs / 10000;
+        const formatted = Number(man.toFixed(man % 1 === 0 ? 0 : 1));
+        return `${sign}${formatted}만억`;
+      }
+      return `${sign}${abs.toLocaleString()}억`;
+    }
+    
+    if (abs >= 100000000) {
+      const eoc = abs / 100000000;
+      const formatted = Number(eoc.toFixed(eoc % 1 === 0 ? 0 : 1));
+      return `${sign}${formatted}억`;
+    } else if (abs >= 10000) {
+      const man = abs / 10000;
+      const formatted = Number(man.toFixed(man % 1 === 0 ? 0 : 1));
+      return `${sign}${formatted}만`;
+    } else if (abs >= 1000) {
+      const chun = abs / 1000;
+      const formatted = Number(chun.toFixed(chun % 1 === 0 ? 0 : 1));
+      return `${sign}${formatted}천`;
+    }
+    return `${sign}${abs}`;
+  };
+
   // Form State
   const [formType, setFormType] = useState<TransactionType>('expense');
   const [formAmount, setFormAmount] = useState<string>('');
@@ -530,6 +559,7 @@ export default function App() {
   const [recEndDate, setRecEndDate] = useState<string>('');
   const [recFrequency, setRecFrequency] = useState<FrequencyType>('monthly');
   const [recCustomInterval, setRecCustomInterval] = useState<number>(3);
+  const [recFilter, setRecFilter] = useState<'all' | 'income' | 'expense'>('all');
 
   const [months, setMonths] = useState<Date[]>(() => {
     let savedMonths: Date[] = [];
@@ -936,6 +966,16 @@ export default function App() {
 
   // --- Manage Recurring Items Logic ---
 
+  const applyPreset = (preset: { memo: string; type: TransactionType; amount: number; frequency: FrequencyType; customInterval?: number }) => {
+    setRecType(preset.type);
+    setRecAmount(preset.amount.toLocaleString('ko-KR'));
+    setRecMemo(preset.memo);
+    setRecFrequency(preset.frequency);
+    if (preset.customInterval) {
+      setRecCustomInterval(preset.customInterval);
+    }
+  };
+
   const addRecurringRule = () => {
     const rawAmount = Number(recAmount.replace(/,/g, ''));
     if (!rawAmount || isNaN(rawAmount)) {
@@ -1001,6 +1041,36 @@ export default function App() {
       return '';
     }
   };
+
+  const recurringOverview = useMemo(() => {
+    let incomeTotalMonthly = 0;
+    let expenseTotalMonthly = 0;
+
+    recurringTransactions.forEach(rule => {
+      let monthlyEquiv = 0;
+      if (rule.frequency === 'daily') {
+        monthlyEquiv = rule.amount * 30;
+      } else if (rule.frequency === 'weekly') {
+        monthlyEquiv = rule.amount * 4.33;
+      } else if (rule.frequency === 'monthly') {
+        monthlyEquiv = rule.amount;
+      } else if (rule.frequency === 'custom' && rule.customInterval) {
+        monthlyEquiv = (rule.amount * 30) / rule.customInterval;
+      }
+
+      if (rule.type === 'income') {
+        incomeTotalMonthly += monthlyEquiv;
+      } else {
+        expenseTotalMonthly += monthlyEquiv;
+      }
+    });
+
+    return {
+      income: Math.round(incomeTotalMonthly),
+      expense: Math.round(expenseTotalMonthly),
+      net: Math.round(incomeTotalMonthly - expenseTotalMonthly),
+    };
+  }, [recurringTransactions]);
 
   // Calculate daily balances
   const simulationData = useMemo(() => {
@@ -1129,30 +1199,37 @@ export default function App() {
                 }}
                 onDoubleClick={() => openForm(day)}
                 className={`
-                  bg-m3-surface min-h-[70px] md:min-h-[85px] p-1.5 md:p-2 flex flex-col justify-between cursor-pointer transition-all
+                  bg-m3-surface min-h-[66px] md:min-h-[85px] p-1 md:p-2 flex flex-col justify-between cursor-pointer transition-all w-full overflow-hidden
                   ${!isInMonth ? 'opacity-30 pointer-events-none' : 'hover:bg-m3-surface-container flex'}
                   ${isSelected && isInMonth ? 'ring-2 ring-inset ring-[#007AFF]/30 bg-blue-50/20' : ''}
                 `}
               >
-                <div className="flex justify-between items-start mb-0.5">
+                <div className="flex justify-between items-start mb-0.5 shrink-0">
                   <span className={`
-                    text-[11px] md:text-[13px] font-semibold
-                    ${isToday ? 'bg-m3-primary text-white w-[18px] h-[18px] md:w-[22px] md:h-[22px] rounded-full flex items-center justify-center' : 'text-gray-700'}
+                    text-[10px] md:text-[13px] font-bold
+                    ${isToday ? 'bg-m3-primary text-white w-[16px] h-[16px] md:w-[22px] md:h-[22px] rounded-full flex items-center justify-center' : 'text-gray-700'}
                   `}>
                     {format(day, 'd')}
                   </span>
                 </div>
 
                 {isInMonth && stats && (
-                  <div className="flex flex-col items-end flex-grow">
+                  <div className="flex flex-col items-end justify-end flex-grow w-full overflow-hidden">
                     {stats.income > 0 && (
-                      <span className="text-[9px] md:text-[10px] font-extrabold text-m3-primary mb-[1px] tabular-nums tracking-tight">+{formatCurrency(stats.income)}</span>
+                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-m3-primary mb-[0.5px] tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
+                        <span className="inline sm:hidden">+{formatCalendarCompact(stats.income)}</span>
+                        <span className="hidden sm:inline">+{formatCurrency(stats.income)}</span>
+                      </span>
                     )}
                     {stats.expense > 0 && (
-                      <span className="text-[9px] md:text-[10px] font-extrabold text-rose-650 mb-[1px] tabular-nums tracking-tight">-{formatCurrency(stats.expense)}</span>
+                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-rose-600 mb-[0.5px] tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
+                        <span className="inline sm:hidden">-{formatCalendarCompact(stats.expense)}</span>
+                        <span className="hidden sm:inline">-{formatCurrency(stats.expense)}</span>
+                      </span>
                     )}
-                    <span className={`text-[10px] md:text-[11px] font-black mt-auto tabular-nums tracking-tight ${stats.balance < 0 ? 'text-rose-650' : 'text-slate-900'} ${isToday ? 'bg-m3-secondary-container/50 px-1 rounded-sm' : ''}`}>
-                      {formatCurrency(stats.balance)}
+                    <span className={`text-[8.5px] sm:text-[10px] md:text-[11px] font-black mt-0.5 tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block ${stats.balance < 0 ? 'text-rose-600' : 'text-slate-950'} ${isToday ? 'bg-m3-secondary-container/50 px-0.5 rounded-sm' : ''}`}>
+                      <span className="inline sm:hidden">{formatCalendarCompact(stats.balance)}</span>
+                      <span className="hidden sm:inline">{formatCurrency(stats.balance)}</span>
                     </span>
                   </div>
                 )}
@@ -1284,7 +1361,7 @@ export default function App() {
                   onClick={() => { setSidebarTab('recurring'); setActiveTab('recurring'); }}
                   className={`py-1.5 rounded-full transition-all text-center cursor-pointer ${sidebarTab === 'recurring' ? 'bg-m3-surface shadow-xs text-slate-800 border border-slate-200/30 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                  반복 항목 관리
+                  고정 지출 관리
                 </button>
               </div>
 
@@ -1313,7 +1390,7 @@ export default function App() {
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-bold">{t('총 지출 (예정)')}</span>
-                      <span className="font-extrabold text-rose-650 tabular-nums">
+                      <span className="font-extrabold text-rose-600 tabular-nums">
                         -<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}</span>
                       </span>
                     </div>
@@ -1352,7 +1429,7 @@ export default function App() {
                                   {tx.id.startsWith('dynamic-') && <span className="text-m3-primary font-bold shrink-0 text-[10px]" title="반복 발생 항목">🔁</span>}
                                   {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                                 </span>
-                                <span className={`text-[11px] font-black mt-0.5 tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-650'}`}>
+                                <span className={`text-[11px] font-black mt-0.5 tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-600'}`}>
                                   {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                                 </span>
                               </div>
@@ -1389,13 +1466,58 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-5">
-                  {/* 반복 지출/수입 등록 양식 - Elegant Tonal styling */}
-                  <section className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 space-y-4">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Repeat className="w-3.5 h-3.5 text-m3-primary" /> 반복 내역 추가
-                    </h3>
+                <div className="space-y-6">
+                  {/* 반복 재정 요약 분석 카드 */}
+                  <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
+                    <div className="absolute right-[-10px] top-[-10px] opacity-10">
+                      <Repeat className="w-24 h-24 text-white rotate-12" />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-black text-indigo-200 uppercase tracking-widest flex items-center gap-1.5">
+                        <Wallet className="w-3.5 h-3.5 text-indigo-300" /> 월간 고정 흐름 분석
+                      </h4>
+                      <p className="text-[11px] text-slate-300/80 mt-1 leading-relaxed">
+                        등록된 모든 반복 규칙의 한 달 기준 환산 요약입니다.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-700/50">
+                      <div className="space-y-0.5">
+                        <span className="text-[9.5px] font-bold text-slate-400 block">고정 수입 (월)</span>
+                        <div className="flex items-center gap-1 text-emerald-400 font-black text-sm tabular-nums">
+                          <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>+{formatCurrency(recurringOverview.income)}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[9.5px] font-bold text-slate-400 block">고정 지출 (월)</span>
+                        <div className="flex items-center gap-1 text-rose-400 font-black text-sm tabular-nums">
+                          <ArrowDownCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>-{formatCurrency(recurringOverview.expense)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 rounded-2xl p-3 flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-200">순 고정 자금 (월)</span>
+                      <span className={`text-sm font-black tabular-nums ${recurringOverview.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {recurringOverview.net >= 0 ? '+' : ''}{formatCurrency(recurringOverview.net)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 반복 지출/수입 등록 양식 */}
+                  <section className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 space-y-4 shadow-3xs">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> 반복 내역 추가
+                      </h3>
+                      <span className="text-[10px] text-m3-primary font-bold bg-m3-primary-container/40 px-2 py-0.5 rounded-full">
+                        시뮬레이터 반영
+                      </span>
+                    </div>
                     
+                    {/* 수입 / 지출 탭 토글 */}
                     <div className="grid grid-cols-2 gap-1 bg-slate-200/50 p-1 rounded-full text-xs font-bold select-none border border-slate-200/10">
                       <button 
                         type="button"
@@ -1407,10 +1529,48 @@ export default function App() {
                       <button 
                         type="button"
                         onClick={() => setRecType('expense')}
-                        className={`py-1.5 rounded-full transition-colors text-center cursor-pointer ${recType === 'expense' ? 'bg-rose-650 text-white shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`py-1.5 rounded-full transition-colors text-center cursor-pointer ${recType === 'expense' ? 'bg-rose-600 text-white shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'}`}
                       >
                         지출
                       </button>
+                    </div>
+
+                    {/* 추천 템플릿 (원클릭 레이아웃) */}
+                    <div className="space-y-1.5">
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">추천 반복 항목 (원클릭 입력)</label>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-200">
+                        {(recType === 'income' 
+                          ? [
+                              { memo: '급여 (월급)', type: 'income', amount: 3500000, frequency: 'monthly', icon: '💼' },
+                              { memo: '아르바이트', type: 'income', amount: 950000, frequency: 'monthly', icon: '⚡' },
+                              { memo: '정기 용돈', type: 'income', amount: 300000, frequency: 'monthly', icon: '🧸' },
+                              { memo: '투자 배당금', type: 'income', amount: 150000, frequency: 'monthly', icon: '📈' }
+                            ]
+                          : [
+                              { memo: '유튜브 프리미엄', type: 'expense', amount: 14900, frequency: 'monthly', icon: '📺' },
+                              { memo: '넷플릭스', type: 'expense', amount: 17000, frequency: 'monthly', icon: '🎬' },
+                              { memo: '월세 납부', type: 'expense', amount: 550000, frequency: 'monthly', icon: '🏠' },
+                              { memo: '통신 요금', type: 'expense', amount: 69000, frequency: 'monthly', icon: '📱' },
+                              { memo: '헬스장/피트니스', type: 'expense', amount: 50000, frequency: 'monthly', icon: '🏋️' },
+                              { memo: '실비 보험료', type: 'expense', amount: 45000, frequency: 'monthly', icon: '🛡️' }
+                            ]
+                        ).map((preset) => (
+                          <button
+                            key={preset.memo}
+                            type="button"
+                            onClick={() => applyPreset({
+                              memo: preset.memo,
+                              type: preset.type as TransactionType,
+                              amount: preset.amount,
+                              frequency: preset.frequency as FrequencyType
+                            })}
+                            className="bg-m3-surface hover:bg-m3-secondary-container hover:text-m3-on-secondary-container text-slate-700 hover:border-m3-primary/30 border border-slate-200/80 rounded-full px-2.5 py-1 text-[10.5px] font-black transition-all flex items-center gap-1 shadow-3xs hover:scale-95 shrink-0 whitespace-nowrap cursor-pointer"
+                          >
+                            <span>{preset.icon}</span>
+                            <span>{preset.memo}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="space-y-1">
@@ -1502,41 +1662,89 @@ export default function App() {
                     </button>
                   </section>
 
-                  {/* 활성 반복 규칙 관리 목록 */}
+                  {/* 활성 반복 규칙 관리 목록 & 세그먼트 필터 */}
                   <section className="space-y-3">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">
-                      반복 리스트 ({recurringTransactions.length}개)
-                    </label>
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5 no-scrollbar">
-                      {recurringTransactions.map(rule => (
-                        <div key={rule.id} className="p-3.5 bg-m3-surface border border-slate-200 rounded-3xl flex items-center justify-between hover:shadow-3xs transition-shadow">
-                          <div className="min-w-0 pr-2">
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                              <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full ${rule.type === 'income' ? 'bg-m3-primary-container/40 text-m3-primary' : 'bg-rose-55/10 text-rose-650'}`}>
-                                {rule.type === 'income' ? '수입' : '지출'}
-                              </span>
-                              <span className="text-xs font-extrabold text-slate-800 truncate">{rule.memo}</span>
-                            </div>
-                            <div className="text-[10px] font-bold text-slate-400 flex flex-col space-y-0.5">
-                              <span>• 주기: {getFrequencyLabel(rule)}</span>
-                              <span>• 일정: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(영구)'}</span>
-                            </div>
-                            <div className="text-xs font-black text-slate-900 mt-2 tracking-tight tabular-nums">
-                              <span className="tabular-nums tracking-tight">{formatCurrency(rule.amount)}</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => deleteRecurringRule(rule.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors shrink-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        등록 목록 ({recurringTransactions.length}개)
+                      </label>
+                      
+                      {/* 카드 필터 버튼 */}
+                      <div className="flex bg-slate-100 p-0.5 rounded-full border border-slate-200/50 text-[9.5px] font-bold select-none">
+                        {(['all', 'income', 'expense'] as const).map((filter) => {
+                          const count = filter === 'all' 
+                            ? recurringTransactions.length 
+                            : recurringTransactions.filter(r => r.type === filter).length;
+                          return (
+                            <button
+                              key={filter}
+                              type="button"
+                              onClick={() => setRecFilter(filter)}
+                              className={`px-2 py-0.5 rounded-full transition-all cursor-pointer font-black ${recFilter === filter ? 'bg-white shadow-3xs text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                              {filter === 'all' ? '전체' : filter === 'income' ? '수입' : '지출'} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                      {recurringTransactions.length === 0 && (
-                        <div className="text-center py-8 text-xs text-slate-400 italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
-                          등록된 반복 규칙이 없습니다.
+                    <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-0.5 no-scrollbar">
+                      {recurringTransactions
+                        .filter(rule => recFilter === 'all' || rule.type === recFilter)
+                        .map(rule => {
+                          const isInc = rule.type === 'income';
+                          return (
+                            <div 
+                              key={rule.id} 
+                              className={`p-3.5 bg-m3-surface border rounded-3xl flex items-center justify-between hover:shadow-2xs transition-all ${
+                                isInc 
+                                  ? 'border-emerald-100 bg-gradient-to-br from-m3-surface to-emerald-50/10' 
+                                  : 'border-rose-100 bg-gradient-to-br from-m3-surface to-rose-50/10'
+                              }`}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${
+                                    isInc 
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                                      : 'bg-rose-50 text-rose-700 border border-rose-100'
+                                  }`}>
+                                    {isInc ? '수입' : '지출'}
+                                  </span>
+                                  <span className="text-xs font-extrabold text-slate-800 truncate block max-w-[120px]" title={rule.memo}>
+                                    {rule.memo}
+                                  </span>
+                                  <span className="text-[9.5px] font-bold text-m3-primary bg-m3-secondary-container px-2 py-0.5 rounded-full">
+                                    {getFrequencyLabel(rule)}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] font-bold text-slate-400/80 flex flex-col space-y-0.5">
+                                  <span className="flex items-center gap-1">
+                                    <CalendarIcon className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span>기간: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(무기한)'}</span>
+                                  </span>
+                                </div>
+                                <div className={`text-[12px] font-black mt-2 tracking-tight tabular-nums ${isInc ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  <span className="tabular-nums tracking-tight">
+                                    {isInc ? '+' : '-'}{formatCurrency(rule.amount)}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => deleteRecurringRule(rule.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors shrink-0 cursor-pointer"
+                                title="규칙 삭제"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+
+                      {recurringTransactions.filter(rule => recFilter === 'all' || rule.type === recFilter).length === 0 && (
+                        <div className="text-center py-10 text-xs text-slate-400 font-medium italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 px-4">
+                          조건에 부합하는 반복 규칙이 없습니다.
                         </div>
                       )}
                     </div>
@@ -1555,7 +1763,7 @@ export default function App() {
                   setIsResetOptionsExpanded(false);
                   setIsResetModalOpen(true);
                 }}
-                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-650 rounded-full font-black text-xs transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs"
+                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full font-black text-xs transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs"
               >
                 {t('데이터 초기화')}
               </button>
