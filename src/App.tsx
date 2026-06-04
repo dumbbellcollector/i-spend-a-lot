@@ -85,7 +85,7 @@ interface RecurringException {
 
 // --- Utils ---
 
-const formatCurrency = (amount: number) => {
+const formatCurrencyGlobal = (amount: number) => {
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
 };
 
@@ -1095,7 +1095,7 @@ export default function App() {
           {months.length > 1 && (
             <button 
               onClick={() => removeMonth(month)}
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-3xl transition-colors"
               title="달력 삭제"
             >
               <X className="w-5 h-5" />
@@ -1103,9 +1103,9 @@ export default function App() {
           )}
         </div>
         
-        <div className="bg-[#E5E7EB] border border-[#E5E7EB] grid grid-cols-7 gap-[1px] rounded-lg overflow-hidden flex-1 shadow-sm mx-auto w-full">
+        <div className="bg-[#E5E7EB] border border-[#E5E7EB] grid grid-cols-7 gap-[1px] rounded-xl overflow-hidden flex-1 border border-m3-surface-container-high shadow-xs mx-auto w-full">
           {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
-            <div key={day} className="bg-white py-1.5 md:py-2 text-center text-[9px] md:text-[10px] font-bold text-gray-400 border-b border-gray-100">
+            <div key={day} className="bg-m3-surface py-1.5 md:py-2 text-center text-[9px] md:text-[10px] font-bold text-gray-400 border-b border-m3-surface-container-high">
               {day}
             </div>
           ))}
@@ -1129,39 +1129,31 @@ export default function App() {
                 }}
                 onDoubleClick={() => openForm(day)}
                 className={`
-                  bg-white min-h-[70px] md:min-h-[85px] p-1.5 md:p-2 flex flex-col justify-between cursor-pointer transition-all
-                  ${!isInMonth ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-50 flex'}
+                  bg-m3-surface min-h-[70px] md:min-h-[85px] p-1.5 md:p-2 flex flex-col justify-between cursor-pointer transition-all
+                  ${!isInMonth ? 'opacity-30 pointer-events-none' : 'hover:bg-m3-surface-container flex'}
                   ${isSelected && isInMonth ? 'ring-2 ring-inset ring-[#007AFF]/30 bg-blue-50/20' : ''}
                 `}
               >
                 <div className="flex justify-between items-start mb-0.5">
                   <span className={`
                     text-[11px] md:text-[13px] font-semibold
-                    ${isToday ? 'bg-[#007AFF] text-white w-[18px] h-[18px] md:w-[22px] md:h-[22px] rounded-full flex items-center justify-center' : 'text-gray-700'}
+                    ${isToday ? 'bg-m3-primary text-white w-[18px] h-[18px] md:w-[22px] md:h-[22px] rounded-full flex items-center justify-center' : 'text-gray-700'}
                   `}>
                     {format(day, 'd')}
                   </span>
                 </div>
 
-                {isInMonth && (
+                {isInMonth && stats && (
                   <div className="flex flex-col items-end flex-grow">
-                    <div className="flex flex-col items-end w-full space-y-0.5 overflow-hidden mb-0.5">
-                      {dayTransactions.slice(0, 3).map(t => (
-                        <span key={t.id} className={`text-[8px] md:text-[9.5px] font-medium block truncate max-w-full 
-                          ${!t.isActive ? 'text-gray-400 line-through' : (t.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]')}
-                        `}>
-                          {t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString()}
-                        </span>
-                      ))}
-                      {dayTransactions.length > 3 && (
-                        <span className="text-[7px] text-gray-400">···</span>
-                      )}
-                    </div>
-                    {stats && (
-                      <span className="text-[#8E8E93] text-[8px] md:text-[9.5px] font-medium text-right mt-auto border-t border-gray-100 pt-0.5 w-full">
-                        {stats.balance.toLocaleString()}
-                      </span>
+                    {stats.income > 0 && (
+                      <span className="text-[9px] md:text-[10px] font-extrabold text-m3-primary mb-[1px] tabular-nums tracking-tight">+{formatCurrency(stats.income)}</span>
                     )}
+                    {stats.expense > 0 && (
+                      <span className="text-[9px] md:text-[10px] font-extrabold text-rose-650 mb-[1px] tabular-nums tracking-tight">-{formatCurrency(stats.expense)}</span>
+                    )}
+                    <span className={`text-[10px] md:text-[11px] font-black mt-auto tabular-nums tracking-tight ${stats.balance < 0 ? 'text-rose-650' : 'text-slate-900'} ${isToday ? 'bg-m3-secondary-container/50 px-1 rounded-sm' : ''}`}>
+                      {formatCurrency(stats.balance)}
+                    </span>
                   </div>
                 )}
               </div>
@@ -1173,387 +1165,423 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#F8F9FA] overflow-hidden">
-      {/* Mobile Floating Pills Navigation */}
-      <div className="lg:hidden fixed top-0 w-full z-40 pointer-events-none safe-top-padding pt-3 px-4 flex gap-2 overflow-x-auto no-scrollbar">
+    <div className="flex flex-col h-screen w-full bg-m3-surface font-sans text-slate-800 overflow-hidden antialiased">
+      {/* Mobile Glass Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-slate-50/85 backdrop-blur-md border-b border-slate-200/40 py-3.5 px-6 flex justify-between items-center">
+        <div className="flex flex-col">
+          <h1 
+            className="text-base font-extrabold text-slate-900 tracking-tight select-none cursor-pointer hover:text-m3-primary transition-colors"
+            onClick={handleTitleClick}
+          >
+            {t('Balance Calendar')}
+          </h1>
+          <p className="text-[9.5px] text-slate-400 font-medium">{t('Finance Simulation')}</p>
+        </div>
+        <button 
+          onClick={() => setIsHelpModalOpen(true)}
+          className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-full transition-all active:scale-95"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Mobile Material 3 Bottom Navigation Dock */}
+      <div className="lg:hidden fixed bottom-6 left-4 right-4 z-40 pointer-events-none flex justify-center">
+        <div className="bg-m3-surface/95 backdrop-blur-md w-full max-w-sm rounded-full border border-m3-surface-container-high shadow-xs border border-m3-outline-variant border border-m3-outline-variant p-2 flex items-center justify-around pointer-events-auto">
           <button 
+            type="button"
             onClick={() => {
               if (activeTab === 'calendar') handleTitleClick();
               else setActiveTab('calendar');
             }}
-            className={`pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 ${activeTab === 'calendar' ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}
+            className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
           >
-            <CalendarIcon className="w-3.5 h-3.5" /> 달력
+            <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${activeTab === 'calendar' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
+              <CalendarIcon className="w-5 h-5 shrink-0" />
+            </div>
+            <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">달력</span>
           </button>
+          
           <button 
-            onClick={() => setActiveTab('settings')}
-            className={`pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 ${activeTab === 'settings' ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}
-          >
-            <Settings className="w-3.5 h-3.5" /> 설정
-          </button>
-          <button 
+            type="button"
             onClick={() => setActiveTab('recurring')}
-            className={`pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 ${activeTab === 'recurring' ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700'}`}
+            className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
           >
-            <Repeat className="w-3.5 h-3.5" /> 반복 관리
+            <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${activeTab === 'recurring' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
+              <Repeat className="w-5 h-5 shrink-0" />
+            </div>
+            <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">반복관리</span>
           </button>
+
+          <button 
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
+          >
+            <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${activeTab === 'settings' ? 'bg-m3-secondary-container text-m3-on-secondary-container' : 'text-slate-500 hover:text-slate-800'}`}>
+              <Settings className="w-5 h-5 shrink-0" />
+            </div>
+            <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">설정</span>
+          </button>
+
           {(() => {
              const finalBalance = simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance;
              const isNegative = finalBalance < 0;
              return deathValleyInfo ? (
                <button 
+                 type="button"
                  onClick={() => setIsDeathValleyModalOpen(true)}
-                 className={`pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold shadow-sm border transition-colors active:scale-95 shrink-0 ${
-                   isNegative ? 'bg-white border-red-200 text-red-600' : 'bg-white border-green-200 text-green-600'
-                 }`}
+                 className="flex flex-col items-center justify-center flex-1 py-1 transition-all"
                >
-                 <TrendingDown className="w-3.5 h-3.5" /> {isNegative ? '추경 필요' : '건전재정'}
+                 <div className={`flex items-center justify-center px-5 py-1.5 rounded-full duration-200 ${isNegative ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                   <TrendingDown className="w-5 h-5 shrink-0" />
+                 </div>
+                 <span className="text-[9.5px] font-extrabold mt-1 text-slate-600">{isNegative ? '추경필요' : '건전대원'}</span>
                </button>
              ) : null;
            })()}
-          <button 
-            onClick={() => setIsHelpModalOpen(true)}
-            className="pointer-events-auto px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors shadow-sm border flex items-center justify-center gap-1.5 shrink-0 bg-white border-gray-200 text-gray-700 active:scale-95"
-          >
-            <HelpCircle className="w-3.5 h-3.5" /> {t('앱 사용법')}
-          </button>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        {/* Sidebar - Drawer on mobile, sidebar on desktop */}
-         <aside 
+        {/* Floating Desktop Sidebar */}
+        <aside 
           className={`
-            w-full lg:w-[340px] bg-white border-r border-[#E5E7EB] flex-col p-5 pt-20 lg:pt-6 shrink-0
-            ${(activeTab === 'settings' || activeTab === 'recurring') ? 'flex overflow-y-auto' : 'hidden lg:flex overflow-hidden'}
+            w-full lg:w-[350px] bg-m3-surface lg:m-4 lg:border border-slate-200/80 lg:border border-m3-surface-container-high shadow-xs lg:rounded-3xl flex-col p-6 pt-24 lg:pt-6 shrink-0 h-full overflow-hidden
+            ${(activeTab === 'settings' || activeTab === 'recurring') ? 'flex overflow-y-auto pb-32 lg:pb-6' : 'hidden lg:flex overflow-hidden'}
           `}
         >
+          {/* Sidebar Desktop branding */}
           <div className="hidden lg:flex items-center justify-between mb-6">
             <div className="flex flex-col">
               <h1 
-                className="text-lg font-bold tracking-tight mb-0.5 select-none hover:text-[#007AFF] transition-colors cursor-pointer"
+                className="text-base font-black tracking-tight mb-0.5 select-none hover:text-m3-primary transition-colors cursor-pointer"
                 onClick={handleTitleClick}
               >
                 {t('Balance Calendar')}
               </h1>
-              <p className="text-[10px] text-gray-500">{t('Finance Simulation')}</p>
+              <p className="text-[10px] text-slate-400 font-bold">{t('Finance Simulation')}</p>
             </div>
             <button 
-              className="lg:hidden p-2 text-gray-400 hover:text-gray-600"
+              className="lg:hidden p-2 text-slate-400 hover:text-slate-600"
               onClick={() => setActiveTab('calendar')}
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="space-y-6 flex-grow overflow-y-auto pr-1">
-          {/* Segmented Control inside Sidebar on Desktop */}
-          <div className="hidden lg:grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl mb-4 text-xs font-semibold select-none">
-            <button 
-              onClick={() => { setSidebarTab('detail'); setActiveTab('settings'); }}
-              className={`py-1.5 rounded-lg transition-all text-center ${sidebarTab === 'detail' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
-            >
-              기본 설정 및 내역
-            </button>
-            <button 
-              onClick={() => { setSidebarTab('recurring'); setActiveTab('recurring'); }}
-              className={`py-1.5 rounded-lg transition-all text-center ${sidebarTab === 'recurring' ? 'bg-white shadow-sm text-gray-900 border border-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
-            >
-              반복 항목 관리
-            </button>
-          </div>
+          <div className="space-y-6 flex-grow overflow-y-auto pr-1 no-scrollbar flex flex-col justify-between">
+            <div>
+              {/* Segmented Control with Capsule design */}
+              <div className="hidden lg:grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-full mb-6 text-xs font-bold select-none border border-slate-200/30">
+                <button 
+                  onClick={() => { setSidebarTab('detail'); setActiveTab('settings'); }}
+                  className={`py-1.5 rounded-full transition-all text-center cursor-pointer ${sidebarTab === 'detail' ? 'bg-m3-surface shadow-xs text-slate-800 border border-slate-200/30 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  기본 설정 및 내역
+                </button>
+                <button 
+                  onClick={() => { setSidebarTab('recurring'); setActiveTab('recurring'); }}
+                  className={`py-1.5 rounded-full transition-all text-center cursor-pointer ${sidebarTab === 'recurring' ? 'bg-m3-surface shadow-xs text-slate-800 border border-slate-200/30 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  반복 항목 관리
+                </button>
+              </div>
 
-          {sidebarTab === 'detail' ? (
-            <>
-              <section>
-                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">{t('기초 자산 설정')}</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
-                    onChange={handleInitialBalanceChange}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-base font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">{isComradeMode ? '억 원' : '₩'}</span>
-                </div>
-              </section>
+              {sidebarTab === 'detail' ? (
+                <div className="space-y-5">
+                  <section>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('기초 자산 설정')}</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
+                        onChange={handleInitialBalanceChange}
+                        className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-m3-surface rounded-3xl px-4 py-3 text-lg font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-m3-primary/15 transition-all tabular-nums"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-extrabold text-xs">{isComradeMode ? '억 원' : '₩'}</span>
+                    </div>
+                  </section>
 
-              <section className="bg-white border border-[#E5E7EB] rounded-xl p-3 space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-600">{t('총 수입 (예정)')}</span>
-                  <span className="font-semibold text-[#007AFF]">
-                    +{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-600">{t('총 지출 (예정)')}</span>
-                  <span className="font-semibold text-[#FF3B30]">
-                    -{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}
-                  </span>
-                </div>
-                <div className="h-px bg-gray-100 my-1"></div>
-                <div className="flex justify-between items-end">
-                  <span className="text-sm font-medium flex items-center gap-1">
-                    {t('기말 잔액')}
-                    <button 
-                      onClick={() => setIsHelpModalOpen(true)}
-                      className="text-gray-400 hover:text-[#007AFF] transition-colors p-0.5"
-                    >
-                      <HelpCircle className="w-4 h-4" />
-                    </button>
-                  </span>
-                  <span className="text-base font-bold text-[#1C1C1E]">
-                    {formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}
-                  </span>
-                </div>
-              </section>
+                  <section className="bg-slate-50/50 border border-slate-200/60 rounded-3xl p-4 space-y-4 shadow-3xs">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-bold">{t('총 수입 (예정)')}</span>
+                      <span className="font-extrabold text-emerald-600 tabular-nums">
+                        +<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}</span>
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-bold">{t('총 지출 (예정)')}</span>
+                      <span className="font-extrabold text-rose-650 tabular-nums">
+                        -<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}</span>
+                      </span>
+                    </div>
+                    <div className="h-px bg-slate-200/60 my-1"></div>
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-bold leading-none text-slate-700 flex items-center gap-1">
+                        {t('기말 잔액')}
+                        <button 
+                          onClick={() => setIsHelpModalOpen(true)}
+                          className="text-slate-400 tabular-nums tracking-tight hover:text-m3-primary transition-colors p-0.5"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                      <span className="text-lg font-black text-slate-900 tracking-tight leading-none tabular-nums">
+                        <span className="tabular-nums tracking-tight">{formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}</span>
+                      </span>
+                    </div>
+                  </section>
 
-              <div className="hidden lg:block">
-              {selectedDate && (
-                <section>
-                  <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 block">
-                    {format(selectedDate, 'M월 d일', { locale: ko })} 내역
-                  </label>
-                  <div className="space-y-3">
-                    {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).map(tx => (
-                      <div 
-                        key={tx.id} 
-                        onDoubleClick={() => openForm(selectedDate, tx)}
-                        className={`flex items-center justify-between p-3 rounded-xl transition-all select-none cursor-pointer border border-transparent hover:border-[#007AFF]/30 ${tx.isActive ? 'bg-gray-50' : 'bg-white border border-gray-100 opacity-40'}`}
-                      >
-                        <div className="flex flex-col min-w-0 pr-2">
-                          <span className={`text-xs font-semibold truncate flex items-center gap-1 ${!tx.isActive ? 'line-through' : ''}`}>
-                            {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[10px]" title="반복 발생 항목">🔁</span>}
-                            {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
-                          </span>
-                          <span className={`text-[10px] font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                            {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
-                          </span>
+                  <div className="hidden lg:block">
+                    {selectedDate && (
+                      <section className="mt-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">
+                          {format(selectedDate, 'M월 d일', { locale: ko })} 내역
+                        </label>
+                        <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-0.5 no-scrollbar">
+                          {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).map(tx => (
+                            <div 
+                              key={tx.id} 
+                              onDoubleClick={() => openForm(selectedDate, tx)}
+                              className={`flex items-center justify-between p-3.5 rounded-3xl transition-all select-none cursor-pointer border border-slate-200 hover:border-m3-primary/40 ${tx.isActive ? 'bg-m3-surface shadow-3xs' : 'bg-slate-100/40 border-dashed opacity-45'}`}
+                            >
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className={`text-[12px] font-extrabold text-slate-800 truncate flex items-center gap-1.5 ${!tx.isActive ? 'line-through text-slate-400' : ''}`}>
+                                  {tx.id.startsWith('dynamic-') && <span className="text-m3-primary font-bold shrink-0 text-[10px]" title="반복 발생 항목">🔁</span>}
+                                  {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
+                                </span>
+                                <span className={`text-[11px] font-black mt-0.5 tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-650'}`}>
+                                  {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleTransaction(tx.id); }} 
+                                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-all outline-none focus:ring-1 focus:ring-m3-primary/15 ${tx.isActive ? 'bg-m3-primary justify-end' : 'bg-slate-200 justify-start'}`}
+                                >
+                                  <div className="w-4 h-4 bg-m3-surface rounded-full shadow-3xs" />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); openForm(selectedDate, tx); }} 
+                                  className="p-1 text-slate-400 hover:text-m3-primary transition-colors"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }} 
+                                  className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).length === 0 && (
+                            <div className="text-center py-8 text-xs text-slate-400 italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
+                              내역이 없습니다.
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); toggleTransaction(tx.id); }} 
-                            className={`w-8 h-4.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
-                          >
-                            <div className="w-3.5 h-3.5 bg-white rounded-full shadow-sm" />
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); openForm(selectedDate, tx); }} 
-                            className="p-1 text-gray-400 hover:text-[#007AFF] transition-colors"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }} 
-                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).length === 0 && (
-                      <div className="text-center py-6 text-xs text-gray-400 italic">
-                        내역이 없습니다.
-                      </div>
+                      </section>
                     )}
                   </div>
-                </section>
-              )}
-              </div>
-            </>
-          ) : (
-            <>
-              {/* 반복 지출/수입 등록 양식 */}
-              <section className="bg-gray-50/50 border border-gray-150 p-4 rounded-xl space-y-4">
-                <h3 className="text-xs font-bold text-gray-850 uppercase tracking-wider flex items-center gap-1.5">
-                  <Repeat className="w-3.5 h-3.5 text-blue-600 animate-spin-slow" /> 반복 내역 가입
-                </h3>
-                
-                <div className="grid grid-cols-2 gap-1 bg-gray-200/60 p-1 rounded-xl text-xs font-semibold select-none">
-                  <button 
-                    type="button"
-                    onClick={() => setRecType('income')}
-                    className={`py-1.5 rounded-lg transition-colors text-center ${recType === 'income' ? 'bg-[#007AFF] text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                  >
-                    수입
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setRecType('expense')}
-                    className={`py-1.5 rounded-lg transition-colors text-center ${recType === 'expense' ? 'bg-[#FF3B30] text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                  >
-                    지출
-                  </button>
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-gray-400 font-bold uppercase block">금액</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={recAmount}
-                      onChange={(e) => {
-                        const numericValue = e.target.value.replace(/[^0-9]/g, '');
-                        setRecAmount(numericValue ? Number(numericValue).toLocaleString('ko-KR') : '');
-                      }}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">{isComradeMode ? '억 원' : '₩'}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-gray-400 font-bold uppercase block">내용 (메모)</label>
-                  <input
-                    type="text"
-                    placeholder={recType === 'income' ? '수입 사연 기입' : '지출 사연 기입'}
-                    value={recMemo}
-                    onChange={(e) => setRecMemo(e.target.value)}
-                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase block">시작일</label>
-                    <input
-                      type="date"
-                      value={recStartDate}
-                      onChange={(e) => setRecStartDate(e.target.value)}
-                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase block">종료일 (옵션)</label>
-                    <input
-                      type="date"
-                      value={recEndDate}
-                      onChange={(e) => setRecEndDate(e.target.value)}
-                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-gray-400 font-bold uppercase block">반복 주기</label>
-                  <select
-                    value={recFrequency}
-                    onChange={(e) => setRecFrequency(e.target.value as FrequencyType)}
-                    className="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="daily">매일 (Daily)</option>
-                    <option value="weekly">매주 (Weekly)</option>
-                    <option value="monthly">매달 (Monthly)</option>
-                    <option value="custom">직접 입력 (Custom interval)</option>
-                  </select>
-                </div>
-
-                {recFrequency === 'custom' && (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase block">반복 간격 (일 단위)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="1"
-                        value={recCustomInterval}
-                        onChange={(e) => setRecCustomInterval(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-20 bg-white border border-gray-200 rounded-lg px-3 py-1 text-xs font-bold text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                      <span className="text-xs font-semibold text-gray-600">일 마다 발생</span>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={addRecurringRule}
-                  className="w-full py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors active:scale-95"
-                >
-                  반복 규칙 생성하기
-                </button>
-              </section>
-
-              {/* 활성 반복 규칙 관리 목록 */}
-              <section className="space-y-3">
-                <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1 block">
-                  반복 리스트 ({recurringTransactions.length}개)
-                </label>
-                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-0.5">
-                  {recurringTransactions.map(rule => (
-                    <div key={rule.id} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between hover:shadow-xs transition-shadow">
-                      <div className="min-w-0 pr-2">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${rule.type === 'income' ? 'bg-blue-50 text-[#007AFF]' : 'bg-red-50 text-[#FF3B30]'}`}>
-                            {rule.type === 'income' ? '수입' : '지출'}
-                          </span>
-                          <span className="text-xs font-bold text-gray-800 truncate">{rule.memo}</span>
-                        </div>
-                        <div className="text-[10px] font-medium text-gray-400 flex flex-col space-y-0.5">
-                          <span>• 주기: {getFrequencyLabel(rule)}</span>
-                          <span>• 일정: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(영구)'}</span>
-                        </div>
-                        <div className="text-xs font-extrabold text-gray-900 mt-1.5">
-                          {formatCurrency(rule.amount)}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => deleteRecurringRule(rule.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-55 rounded-lg transition-colors shrink-0"
+              ) : (
+                <div className="space-y-5">
+                  {/* 반복 지출/수입 등록 양식 - Elegant Tonal styling */}
+                  <section className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 space-y-4">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <Repeat className="w-3.5 h-3.5 text-m3-primary" /> 반복 내역 추가
+                    </h3>
+                    
+                    <div className="grid grid-cols-2 gap-1 bg-slate-200/50 p-1 rounded-full text-xs font-bold select-none border border-slate-200/10">
+                      <button 
+                        type="button"
+                        onClick={() => setRecType('income')}
+                        className={`py-1.5 rounded-full transition-colors text-center cursor-pointer ${recType === 'income' ? 'bg-m3-primary text-white shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        수입
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setRecType('expense')}
+                        className={`py-1.5 rounded-full transition-colors text-center cursor-pointer ${recType === 'expense' ? 'bg-rose-650 text-white shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'}`}
+                      >
+                        지출
                       </button>
                     </div>
-                  ))}
 
-                  {recurringTransactions.length === 0 && (
-                    <div className="text-center py-8 text-xs text-gray-400 italic bg-gray-50/40 rounded-xl border border-dashed border-gray-200">
-                      등록된 반복 규칙이 없습니다.
+                    <div className="space-y-1">
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">금액</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={recAmount}
+                          onChange={(e) => {
+                            const numericValue = e.target.value.replace(/[^0-9]/g, '');
+                            setRecAmount(numericValue ? Number(numericValue).toLocaleString('ko-KR') : '');
+                          }}
+                          className="w-full bg-m3-surface border border-slate-200 rounded-3xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-m3-primary/20 focus:border-m3-primary tabular-nums"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-black">{isComradeMode ? '억 원' : '₩'}</span>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </section>
-            </>
-          )}
-        </div>
 
-        <div className="pt-6 space-y-2 mt-auto">
-          <button 
-            onClick={() => {
-              setKeepInitialBalance(false);
-              setKeepFutureRecurringRules(false);
-              setKeepPastRecurringRecords(false);
-              setIsResetOptionsExpanded(false);
-              setIsResetModalOpen(true);
-            }}
-            className="w-full py-3 bg-white text-[#FF3B30] border border-red-100 rounded-xl font-semibold text-sm hover:bg-red-50 transition-colors shadow-sm active:scale-95"
-          >
-            {t('데이터 초기화')}
-          </button>
-          <div className="flex gap-2 pt-2">
-            <button 
-              onClick={() => openDataSyncModal('export')}
-              className="flex-1 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs hover:bg-gray-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
-            >
-              <Upload size={14} /> {t('내보내기')}
-            </button>
-            <button 
-              onClick={() => openDataSyncModal('import')}
-              className="flex-1 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl font-semibold text-xs hover:bg-gray-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
-            >
-              <Download size={14} /> {t('불러오기')}
-            </button>
+                    <div className="space-y-1">
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">내용 (메모)</label>
+                      <input
+                        type="text"
+                        placeholder={recType === 'income' ? '수입 사연 기입' : '지출 사연 기입'}
+                        value={recMemo}
+                        onChange={(e) => setRecMemo(e.target.value)}
+                        className="w-full bg-m3-surface border border-slate-200 rounded-3xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-m3-primary/20 focus:border-m3-primary"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">시작일</label>
+                        <input
+                          type="date"
+                          value={recStartDate}
+                          onChange={(e) => setRecStartDate(e.target.value)}
+                          className="w-full bg-m3-surface border border-slate-200 rounded-3xl px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-m3-primary/20 text-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">종료일 (옵션)</label>
+                        <input
+                          type="date"
+                          value={recEndDate}
+                          onChange={(e) => setRecEndDate(e.target.value)}
+                          className="w-full bg-m3-surface border border-slate-200 rounded-3xl px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-m3-primary/20 text-slate-700"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">반복 주기</label>
+                      <select
+                        value={recFrequency}
+                        onChange={(e) => setRecFrequency(e.target.value as FrequencyType)}
+                        className="w-full bg-m3-surface border border-slate-200 rounded-3xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-m3-primary/20"
+                      >
+                        <option value="daily">매일 (Daily)</option>
+                        <option value="weekly">매주 (Weekly)</option>
+                        <option value="monthly">매달 (Monthly)</option>
+                        <option value="custom">직접 입력 (Custom interval)</option>
+                      </select>
+                    </div>
+
+                    {recFrequency === 'custom' && (
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">반복 간격 (일 단위)</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={recCustomInterval}
+                            onChange={(e) => setRecCustomInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-16 bg-m3-surface border border-slate-200 rounded-3xl px-2 py-1.5 text-xs font-black text-center focus:outline-none focus:ring-1 focus:ring-m3-primary/20"
+                          />
+                          <span className="text-xs font-bold text-slate-500">일 마다 발생</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={addRecurringRule}
+                      className="w-full py-2.5 bg-m3-primary text-white rounded-full text-xs font-extrabold hover:bg-m3-primary/90 transition-colors active:scale-95 shadow-3xs"
+                    >
+                      반복 규칙 생성하기
+                    </button>
+                  </section>
+
+                  {/* 활성 반복 규칙 관리 목록 */}
+                  <section className="space-y-3">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">
+                      반복 리스트 ({recurringTransactions.length}개)
+                    </label>
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5 no-scrollbar">
+                      {recurringTransactions.map(rule => (
+                        <div key={rule.id} className="p-3.5 bg-m3-surface border border-slate-200 rounded-3xl flex items-center justify-between hover:shadow-3xs transition-shadow">
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full ${rule.type === 'income' ? 'bg-m3-primary-container/40 text-m3-primary' : 'bg-rose-55/10 text-rose-650'}`}>
+                                {rule.type === 'income' ? '수입' : '지출'}
+                              </span>
+                              <span className="text-xs font-extrabold text-slate-800 truncate">{rule.memo}</span>
+                            </div>
+                            <div className="text-[10px] font-bold text-slate-400 flex flex-col space-y-0.5">
+                              <span>• 주기: {getFrequencyLabel(rule)}</span>
+                              <span>• 일정: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(영구)'}</span>
+                            </div>
+                            <div className="text-xs font-black text-slate-900 mt-2 tracking-tight tabular-nums">
+                              <span className="tabular-nums tracking-tight">{formatCurrency(rule.amount)}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => deleteRecurringRule(rule.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {recurringTransactions.length === 0 && (
+                        <div className="text-center py-8 text-xs text-slate-400 italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
+                          등록된 반복 규칙이 없습니다.
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions of Sidebar */}
+            <div className="pt-6 border-t border-slate-200/50 space-y-3 mt-6 shrink-0 z-10 w-full bg-m3-surface">
+              <button 
+                onClick={() => {
+                  setKeepInitialBalance(false);
+                  setKeepFutureRecurringRules(false);
+                  setKeepPastRecurringRecords(false);
+                  setIsResetOptionsExpanded(false);
+                  setIsResetModalOpen(true);
+                }}
+                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-650 rounded-full font-black text-xs transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs"
+              >
+                {t('데이터 초기화')}
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => openDataSyncModal('export')}
+                  className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
+                >
+                  <Upload size={13} /> {t('내보내기')}
+                </button>
+                <button 
+                  onClick={() => openDataSyncModal('import')}
+                  className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
+                >
+                  <Download size={13} /> {t('불러오기')}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
         </aside>
 
-        <main className={`flex-1 overflow-y-auto px-4 pt-20 pb-8 lg:p-8 flex-col items-center bg-[#F8F9FA] relative ${activeTab === 'calendar' ? 'flex' : 'hidden lg:flex'}`}>
+        <main className={`flex-1 overflow-y-auto px-4 pt-20 pb-8 lg:p-8 flex-col items-center bg-m3-surface relative ${activeTab === 'calendar' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Main Desktop Header */}
           <div className="hidden lg:flex items-center justify-between w-full max-w-5xl mb-6">
             <div className="flex flex-col">
-              <h1 className="text-xl font-bold tracking-tight select-none cursor-pointer hover:text-[#007AFF] transition-colors" onClick={handleTitleClick}>
+              <h1 className="text-xl font-bold tracking-tight select-none cursor-pointer hover:text-m3-primary transition-colors" onClick={handleTitleClick}>
               {t('Balance Calendar')}
               </h1>
               <p className="text-[10px] text-gray-500">{t('Finance Simulation')}</p>
@@ -1562,7 +1590,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setIsHelpModalOpen(true)}
-                className="text-gray-400 hover:text-[#007AFF] transition-colors p-1.5"
+                className="text-gray-400 tabular-nums tracking-tight hover:text-m3-primary transition-colors p-1.5"
               >
                 <HelpCircle className="w-5 h-5" />
               </button>
@@ -1572,7 +1600,7 @@ export default function App() {
                 return deathValleyInfo ? (
                   <button 
                     onClick={() => setIsDeathValleyModalOpen(true)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-colors active:scale-95 shadow-sm border ${
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs border ${
                       isNegative 
                         ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' 
                         : 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100'
@@ -1588,7 +1616,7 @@ export default function App() {
           <div className="w-full max-w-5xl flex flex-col gap-8 pb-8">
             <button 
               onClick={loadPreviousMonth}
-              className="w-full py-3 border-2 border-dashed border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 border-2 border-dashed border-m3-outline-variant text-gray-400 font-bold rounded-full hover:bg-m3-surface hover:text-m3-primary hover:border-m3-primary/30 transition-all flex items-center justify-center gap-2"
             >
               <Plus className="w-5 h-5" /> {t('이전 달력 추가')}
             </button>
@@ -1597,7 +1625,7 @@ export default function App() {
 
             <button 
               onClick={loadNextMonth}
-              className="w-full py-3 border-2 border-dashed border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 border-2 border-dashed border-m3-outline-variant text-gray-400 font-bold rounded-full hover:bg-m3-surface hover:text-m3-primary hover:border-m3-primary/30 transition-all flex items-center justify-center gap-2"
             >
               <Plus className="w-5 h-5" /> {t('다음 달력 추가')}
             </button>
@@ -1616,7 +1644,7 @@ export default function App() {
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
               drag="y"
               dragConstraints={{ top: 0, bottom: 0 }}
               dragElastic={0.2}
@@ -1626,14 +1654,14 @@ export default function App() {
                 }
               }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-[#F9FAFB] w-full rounded-t-3xl shadow-xl flex flex-col max-h-[85vh] absolute bottom-0"
+              className="bg-[#F9FAFB] w-full rounded-t-[28px] border border-m3-surface-container-high shadow-xs border border-m3-outline-variant flex flex-col max-h-[85vh] absolute bottom-0"
             >
               <div 
                 className="w-full pt-4 pb-3 flex justify-center items-center cursor-ns-resize touch-none"
               >
                 <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
               </div>
-              <div className="px-6 pb-4 border-b border-gray-200 shrink-0">
+              <div className="px-6 pb-4 border-b border-m3-outline-variant shrink-0">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold">
                     {format(selectedDate, 'M월 d일', { locale: ko })}
@@ -1652,26 +1680,26 @@ export default function App() {
                   const total = income - expense;
                   return (
                     <div className="text-[13px] font-medium text-gray-600 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[#007AFF]">+{formatCurrency(income)}</span>
-                      <span className="text-gray-400">-</span>
-                      <span className="text-[#FF3B30]">{formatCurrency(expense)}</span>
-                      <span className="text-gray-400">=</span>
-                      <span className={`font-bold ${total >= 0 ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
-                        {total > 0 ? '+' : ''}{formatCurrency(total)}
+                      <span className="text-m3-primary tabular-nums tracking-tight">+<span className="tabular-nums tracking-tight">{formatCurrency(income)}</span></span>
+                      <span className="text-gray-400 tabular-nums tracking-tight">-</span>
+                      <span className="text-m3-error tabular-nums tracking-tight"><span className="tabular-nums tracking-tight">{formatCurrency(expense)}</span></span>
+                      <span className="text-gray-400 tabular-nums tracking-tight">=</span>
+                      <span className={`font-bold ${total >= 0 ? 'text-m3-primary' : 'text-m3-error'}`}>
+                        {total > 0 ? '+' : ''}<span className="tabular-nums tracking-tight">{formatCurrency(total)}</span>
                       </span>
                     </div>
                   );
                 })()}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-0 py-0 overscroll-contain bg-white pb-6">
-                <div className="divide-y divide-gray-100 border-b border-gray-100">
+              <div className="flex-1 overflow-y-auto px-0 py-0 overscroll-contain bg-m3-surface pb-6">
+                <div className="divide-y divide-gray-100 border-b border-m3-surface-container-high">
                 {getTransactionsForDate(selectedDate, transactions, recurringTransactions, recurringExceptions).map(tx => (
-                  <div key={tx.id} className="relative bg-gray-50 overflow-hidden">
+                  <div key={tx.id} className="relative bg-m3-surface-container overflow-hidden">
                     <div className="absolute inset-y-0 right-0 flex items-stretch">
                       <button 
                         onClick={() => deleteTransaction(tx.id)}
-                        className="px-5 bg-[#FF3B30] text-white flex items-center justify-center font-bold text-xs"
+                        className="px-5 bg-m3-error text-white flex items-center justify-center font-bold text-xs"
                       >
                         {t('삭제')}
                       </button>
@@ -1681,14 +1709,14 @@ export default function App() {
                       dragConstraints={{ left: -70, right: 0 }}
                       dragElastic={0.1}
                       onClick={() => { setIsBottomSheetOpen(false); openForm(selectedDate, tx); }}
-                      className={`relative flex items-center justify-between p-4 px-6 transition-colors select-none ${tx.isActive ? 'bg-white' : 'bg-gray-100'}`}
+                      className={`relative flex items-center justify-between p-4 px-6 transition-colors select-none ${tx.isActive ? 'bg-m3-surface' : 'bg-gray-100'}`}
                     >
                       <div className={`flex flex-col min-w-0 pr-2 ${!tx.isActive ? 'opacity-40' : ''}`}>
                         <span className={`text-[13px] font-semibold truncate flex items-center gap-1.5 ${!tx.isActive ? 'line-through' : ''}`}>
                           {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[11px]" title="반복 발생 항목">🔁</span>}
                           {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                         </span>
-                        <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>
+                        <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-m3-primary' : 'text-m3-error'}`}>
                           {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                         </span>
                       </div>
@@ -1696,9 +1724,9 @@ export default function App() {
                         <button 
                           onClick={(e) => { e.stopPropagation(); toggleTransaction(tx.id); }} 
                           onPointerDownCapture={e => e.stopPropagation()}
-                          className={`w-10 h-5.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-[#007AFF] justify-end' : 'bg-gray-300 justify-start'}`}
+                          className={`w-10 h-5.5 rounded-full flex items-center px-0.5 transition-all ${tx.isActive ? 'bg-m3-primary justify-end' : 'bg-gray-300 justify-start'}`}
                         >
-                          <div className="w-4.5 h-4.5 bg-white rounded-full shadow-sm" />
+                          <div className="w-4.5 h-4.5 bg-m3-surface rounded-full border border-m3-surface-container-high shadow-xs" />
                         </button>
                       </div>
                     </motion.div>
@@ -1712,13 +1740,13 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-6 border-t border-gray-200 shrink-0 bg-white pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex gap-3">
+              <div className="p-6 border-t border-m3-outline-variant shrink-0 bg-m3-surface pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex gap-3">
                 <button 
                   onClick={() => {
                     setIsBottomSheetOpen(false);
                     openForm(selectedDate, undefined, 'income');
                   }}
-                  className="flex-1 py-3.5 bg-[#007AFF]/10 text-[#007AFF] rounded-xl font-bold text-sm hover:bg-[#007AFF]/20 transition-colors shadow-sm border border-[#007AFF]/20 active:scale-95 flex justify-center items-center gap-1.5"
+                  className="flex-1 py-3.5 bg-m3-primary-container text-m3-primary rounded-3xl font-bold text-sm hover:bg-m3-primary/20 transition-colors border border-m3-surface-container-high shadow-xs border border-m3-primary/20 active:scale-95 flex justify-center items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> {t('수입 기록')}
                 </button>
@@ -1727,7 +1755,7 @@ export default function App() {
                     setIsBottomSheetOpen(false);
                     openForm(selectedDate, undefined, 'expense');
                   }}
-                  className="flex-1 py-3.5 bg-[#FF3B30]/10 text-[#FF3B30] rounded-xl font-bold text-sm hover:bg-[#FF3B30]/20 transition-colors shadow-sm border border-[#FF3B30]/20 active:scale-95 flex justify-center items-center gap-1.5"
+                  className="flex-1 py-3.5 bg-m3-error-container text-m3-error rounded-3xl font-bold text-sm hover:bg-m3-error/20 transition-colors border border-m3-surface-container-high shadow-xs border border-m3-error/20 active:scale-95 flex justify-center items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> {t('지출 기록')}
                 </button>
@@ -1748,9 +1776,9 @@ export default function App() {
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-lg lg:max-w-sm rounded-t-3xl lg:rounded-2xl shadow-xl p-6 lg:p-6 border-t lg:border border-gray-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+              className="bg-m3-surface w-full max-w-lg lg:max-w-sm rounded-t-[28px] lg:rounded-3xl border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-6 lg:p-6 border-t lg:border border-m3-surface-container-high pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden" />
               <div className="flex justify-between items-center mb-6">
@@ -1776,7 +1804,7 @@ export default function App() {
                         setFormDate(parseISO(e.target.value));
                       }
                     }}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all text-gray-800"
+                    className="w-full bg-m3-surface-container border border-m3-outline-variant rounded-xl py-2.5 px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-m3-primary/30 transition-all text-gray-800"
                   />
                 </div>
 
@@ -1785,13 +1813,13 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-2">
                     <button 
                       onClick={() => setFormType('income')}
-                      className={`py-2.5 rounded-lg font-semibold text-sm transition-all border ${formType === 'income' ? 'bg-[#007AFF]/10 border-[#007AFF] text-[#007AFF]' : 'bg-gray-50 border-gray-100 text-gray-500'}`}
+                      className={`py-2.5 rounded-xl font-semibold text-sm transition-all border ${formType === 'income' ? 'bg-m3-primary-container border-m3-primary text-m3-primary' : 'bg-m3-surface-container border-m3-surface-container-high text-gray-500'}`}
                     >
                       {t('수입')}
                     </button>
                     <button 
                       onClick={() => setFormType('expense')}
-                      className={`py-2.5 rounded-lg font-semibold text-sm transition-all border ${formType === 'expense' ? 'bg-[#FF3B30]/10 border-[#FF3B30] text-[#FF3B30]' : 'bg-gray-50 border-gray-100 text-gray-500'}`}
+                      className={`py-2.5 rounded-xl font-semibold text-sm transition-all border ${formType === 'expense' ? 'bg-m3-error-container border-m3-error text-m3-error' : 'bg-m3-surface-container border-m3-surface-container-high text-gray-500'}`}
                     >
                       {t('지출')}
                     </button>
@@ -1808,7 +1836,7 @@ export default function App() {
                       placeholder="0"
                       value={formAmount}
                       onChange={handleAmountChange}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg py-3 px-4 text-base font-bold focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all"
+                      className="w-full bg-m3-surface-container border border-m3-outline-variant rounded-xl py-3 px-4 text-base font-bold focus:outline-none focus:ring-2 focus:ring-m3-primary/30 transition-all"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 font-bold">{isComradeMode ? '억 원' : '₩'}</span>
                   </div>
@@ -1821,21 +1849,21 @@ export default function App() {
                     placeholder="내용 입력..."
                     value={formMemo}
                     onChange={(e) => setFormMemo(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all"
+                    className="w-full bg-m3-surface-container border border-m3-outline-variant rounded-xl py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-m3-primary/30 transition-all"
                   />
                 </div>
 
                 <div className="flex gap-2 pt-2">
                   <button 
                     onClick={() => setIsFormOpen(false)}
-                    className="flex-1 py-3 text-gray-500 text-sm font-semibold hover:bg-gray-50 rounded-lg transition-all"
+                    className="flex-1 py-3 text-gray-500 text-sm font-semibold hover:bg-m3-surface-container rounded-full transition-all"
                   >
                     {t('취소')}
                   </button>
                   <button 
                     id="save-btn"
                     onClick={addTransaction}
-                    className="flex-[2] py-3 bg-[#007AFF] text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all shadow-sm"
+                    className="flex-[2] py-3 bg-m3-primary text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all border border-m3-surface-container-high shadow-xs"
                   >
                     {t('저장하기')}
                   </button>
@@ -1857,17 +1885,17 @@ export default function App() {
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-md rounded-t-3xl lg:rounded-2xl shadow-xl p-6 border-t lg:border border-gray-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+              className="bg-m3-surface w-full max-w-md rounded-t-[28px] lg:rounded-3xl border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-6 border-t lg:border border-m3-surface-container-high pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-5 lg:hidden" />
               
               <div className="text-center mb-5">
                 <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <AlertTriangle className="w-6 h-6 text-[#FF3B30]" />
+                  <AlertTriangle className="w-6 h-6 text-m3-error" />
                 </div>
-                <h3 className="text-lg font-extrabold text-gray-900 mb-1.5">
+                <h3 className="text-lg font-extrabold text-[#1d192b] mb-1.5">
                   {isComradeMode ? '자료 혁명 단행' : '모든 데이터를 초기화하시겠습니까?'}
                 </h3>
                 <p className="text-xs text-gray-400 leading-relaxed max-w-sm mx-auto font-medium">
@@ -1882,7 +1910,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsResetOptionsExpanded(!isResetOptionsExpanded)}
-                  className="w-full flex items-center justify-between py-2.5 px-4 bg-gray-50 hover:bg-gray-100 active:bg-gray-200/70 rounded-xl text-xs font-bold text-gray-750 transition-colors"
+                  className="w-full flex items-center justify-between py-2.5 px-4 bg-m3-surface-container hover:bg-gray-100 active:bg-gray-200/70 rounded-3xl text-xs font-bold text-gray-750 transition-colors"
                 >
                   <span className="flex items-center gap-1.5">
                     ⚙️ {t('초기화 옵션 설정')}
@@ -1900,7 +1928,7 @@ export default function App() {
                   transition={{ duration: 0.22, ease: "easeInOut" }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-2.5 p-3.5 bg-gray-50/50 rounded-xl border border-gray-100 space-y-3 text-left">
+                  <div className="mt-2.5 p-3.5 bg-m3-surface-container/50 rounded-3xl border border-m3-surface-container-high space-y-3 text-left">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex flex-col min-w-0">
                         <span className="text-xs font-bold text-gray-800">기초 자산 유지</span>
@@ -1909,10 +1937,10 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setKeepInitialBalance(!keepInitialBalance)}
-                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepInitialBalance ? 'bg-[#34C759]' : 'bg-gray-200'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepInitialBalance ? 'bg-green-600' : 'bg-gray-200'}`}
                       >
                         <span
-                          className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-200 ${keepInitialBalance ? 'translate-x-5' : 'translate-x-0'}`}
+                          className={`absolute top-0.5 left-0.5 bg-m3-surface w-5 h-5 rounded-full border border-m3-surface-container-high shadow-xs transition-transform duration-200 ${keepInitialBalance ? 'translate-x-5' : 'translate-x-0'}`}
                         />
                       </button>
                     </div>
@@ -1927,10 +1955,10 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setKeepFutureRecurringRules(!keepFutureRecurringRules)}
-                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepFutureRecurringRules ? 'bg-[#34C759]' : 'bg-gray-200'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepFutureRecurringRules ? 'bg-green-600' : 'bg-gray-200'}`}
                       >
                         <span
-                          className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-200 ${keepFutureRecurringRules ? 'translate-x-5' : 'translate-x-0'}`}
+                          className={`absolute top-0.5 left-0.5 bg-m3-surface w-5 h-5 rounded-full border border-m3-surface-container-high shadow-xs transition-transform duration-200 ${keepFutureRecurringRules ? 'translate-x-5' : 'translate-x-0'}`}
                         />
                       </button>
                     </div>
@@ -1945,10 +1973,10 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setKeepPastRecurringRecords(!keepPastRecurringRecords)}
-                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepPastRecurringRecords ? 'bg-[#34C759]' : 'bg-gray-200'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepPastRecurringRecords ? 'bg-green-600' : 'bg-gray-200'}`}
                       >
                         <span
-                          className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-200 ${keepPastRecurringRecords ? 'translate-x-5' : 'translate-x-0'}`}
+                          className={`absolute top-0.5 left-0.5 bg-m3-surface w-5 h-5 rounded-full border border-m3-surface-container-high shadow-xs transition-transform duration-200 ${keepPastRecurringRecords ? 'translate-x-5' : 'translate-x-0'}`}
                         />
                       </button>
                     </div>
@@ -1961,14 +1989,14 @@ export default function App() {
                 <button 
                   type="button"
                   onClick={() => setIsResetModalOpen(false)}
-                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-250 text-gray-600 text-xs font-bold rounded-xl transition-all"
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 active:bg-gray-250 text-gray-600 text-xs font-bold rounded-full transition-all"
                 >
                   {t('취소')}
                 </button>
                 <button 
                   type="button"
                   onClick={handleReset}
-                  className="flex-[1.5] py-3 bg-[#FF3B30] text-white rounded-xl text-xs font-bold hover:bg-red-650 active:scale-95 transition-all shadow-sm shadow-red-100"
+                  className="flex-[1.5] py-3 bg-m3-error text-white rounded-3xl text-xs font-bold hover:bg-red-650 active:scale-95 transition-all border border-m3-surface-container-high shadow-xs shadow-red-100"
                 >
                   {isComradeMode ? '혁명수행' : '초기화 실행'}
                 </button>
@@ -1989,20 +2017,20 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-sm rounded-2xl shadow-xl p-6 border border-gray-100"
+              className="bg-m3-surface w-full max-w-sm rounded-3xl border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-6 border border-m3-surface-container-high"
             >
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
                     <TrendingDown className="w-4 h-4" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">{t('재정 건전도 예측')}</h3>
+                  <h3 className="text-lg font-bold text-[#1d192b]">{t('재정 건전도 예측')}</h3>
                 </div>
                 <button 
                   onClick={() => setIsDeathValleyModalOpen(false)}
-                  className="p-2 text-gray-400 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 text-gray-400 bg-m3-surface-container hover:bg-gray-100 rounded-full transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -2010,12 +2038,12 @@ export default function App() {
 
               {deathValleyInfo ? (
                 <div className="space-y-4">
-                  <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-xl">
+                  <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-3xl">
                     <p className="text-xs text-orange-800 font-medium mb-1">{t('예상 최저 잔액 발생일')}</p>
                     <p className="text-lg font-bold text-orange-600 flex justify-between items-end">
                       <span>{format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })}</span>
-                      <span className={`text-[15px] ${deathValleyInfo.balance < 0 ? 'text-[#FF3B30]' : 'text-gray-900'}`}>
-                        {formatCurrency(deathValleyInfo.balance)}
+                      <span className={`text-[15px] ${deathValleyInfo.balance < 0 ? 'text-m3-error' : 'text-[#1d192b]'}`}>
+                        <span className="tabular-nums tracking-tight">{formatCurrency(deathValleyInfo.balance)}</span>
                       </span>
                     </p>
                   </div>
@@ -2042,10 +2070,10 @@ export default function App() {
                           content={({ active, payload }) => {
                             if (active && payload && payload.length) {
                               return (
-                                <div className="bg-white border border-gray-100 shadow-lg p-2 rounded-lg text-xs">
+                                <div className="bg-m3-surface border border-m3-surface-container-high border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-2 rounded-xl text-xs">
                                   <p className="text-gray-500 mb-1">{payload[0].payload.date}</p>
-                                  <p className={`font-bold ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-[#FF3B30]' : 'text-[#007AFF]'}`}>
-                                    {formatCurrency(Number(payload[0].value))}
+                                  <p className={`font-bold ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-m3-error' : 'text-m3-primary'}`}>
+                                    <span className="tabular-nums tracking-tight">{formatCurrency(Number(payload[0].value))}</span>
                                   </p>
                                 </div>
                               );
@@ -2076,10 +2104,10 @@ export default function App() {
                 </div>
               )}
 
-              <div className="mt-6 pt-4 border-t border-gray-100">
+              <div className="mt-6 pt-4 border-t border-m3-surface-container-high">
                 <button 
                   onClick={() => setIsDeathValleyModalOpen(false)}
-                  className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors active:scale-95"
+                  className="w-full py-3 bg-gray-900 text-white rounded-3xl font-bold text-sm hover:bg-gray-800 transition-colors active:scale-95"
                 >
                   확인
                 </button>
@@ -2100,9 +2128,9 @@ export default function App() {
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-lg lg:max-w-md rounded-t-3xl lg:rounded-2xl shadow-xl p-6 lg:p-6 border-t lg:border border-gray-100 flex flex-col max-h-[80vh] pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+              className="bg-m3-surface w-full max-w-lg lg:max-w-md rounded-t-[28px] lg:rounded-3xl border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-6 lg:p-6 border-t lg:border border-m3-surface-container-high flex flex-col max-h-[80vh] pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden shrink-0" />
               <div className="flex justify-between items-center mb-4 shrink-0">
@@ -2127,7 +2155,7 @@ export default function App() {
                   value={syncText}
                   onChange={(e) => setSyncText(e.target.value)}
                   readOnly={dataSyncMode === 'export'}
-                  className="w-full h-48 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 resize-none font-mono break-all"
+                  className="w-full h-48 bg-m3-surface-container border border-m3-outline-variant rounded-xl p-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-m3-primary/30 resize-none font-mono break-all"
                   placeholder={dataSyncMode === 'import' ? t('이곳에 텍스트를 붙여넣으세요...') : ''}
                 />
                 <AnimatePresence>
@@ -2142,7 +2170,7 @@ export default function App() {
               <div className="flex gap-3 shrink-0">
                 <button 
                   onClick={() => setIsDataSyncModalOpen(false)}
-                  className="flex-1 py-3 text-gray-500 text-sm font-semibold hover:bg-gray-50 rounded-xl border border-gray-200 transition-all"
+                  className="flex-1 py-3 text-gray-500 text-sm font-semibold hover:bg-m3-surface-container rounded-full border border-m3-outline-variant transition-all"
                 >
                   {t('취소')}
                 </button>
@@ -2155,14 +2183,14 @@ export default function App() {
                         alert(t('복사에 실패했습니다. 직접 선택하여 복사해주세요.'));
                       });
                     }}
-                    className="flex-[2] py-3 bg-[#007AFF] text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all shadow-sm"
+                    className="flex-[2] py-3 bg-m3-primary text-white rounded-3xl font-semibold text-sm hover:bg-blue-700 transition-all border border-m3-surface-container-high shadow-xs"
                   >
                     {t('텍스트 복사하기')}
                   </button>
                 ) : (
                   <button 
                     onClick={handleImport}
-                    className="flex-[2] py-3 bg-[#007AFF] text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-all shadow-sm"
+                    className="flex-[2] py-3 bg-m3-primary text-white rounded-3xl font-semibold text-sm hover:bg-blue-700 transition-all border border-m3-surface-container-high shadow-xs"
                   >
                     {t('데이터 적용하기')}
                   </button>
@@ -2184,38 +2212,38 @@ export default function App() {
               initial={{ opacity: 0, y: "100%" }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-lg lg:max-w-sm rounded-t-3xl lg:rounded-2xl shadow-xl p-6 border-t lg:border border-gray-100 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+              className="bg-m3-surface w-full max-w-lg lg:max-w-sm rounded-t-[28px] lg:rounded-3xl border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-6 border-t lg:border border-m3-surface-container-high pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6"
             >
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6 lg:hidden" />
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold flex items-center gap-2">
-                  <HelpCircle className="w-5 h-5 text-[#007AFF]" /> {t('앱 사용 가이드')}
+                  <HelpCircle className="w-5 h-5 text-m3-primary" /> {t('앱 사용 가이드')}
                 </h3>
-                <button onClick={() => setIsHelpModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-full bg-gray-50 hover:bg-gray-100">
+                <button onClick={() => setIsHelpModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-full bg-m3-surface-container hover:bg-gray-100">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-3 text-sm text-gray-600">
-                <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-gray-900 mb-1"><span className="mr-1">📅</span>{t('내역 관리하기')}</strong>
+                <div className="p-3.5 bg-blue-50/50 rounded-3xl border border-blue-100/50 leading-relaxed">
+                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">📅</span>{t('내역 관리하기')}</strong>
                   {isComradeMode ? '달력 일자를 두 번 쳐서 기입하고, 명단 항목을 다시 눌러 수정하시오.' : '달력 날짜를 더블 탭하여 수입/지출을 등록하고, 날짜 선택 후 나타나는 개별 내역을 탭하여 즉시 수정/삭제할 수 있습니다.'}
                 </div>
-                <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-gray-900 mb-1"><span className="mr-1">💰</span>{t('재정 시뮬레이션')}</strong>
+                <div className="p-3.5 bg-blue-50/50 rounded-3xl border border-blue-100/50 leading-relaxed">
+                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">💰</span>{t('재정 시뮬레이션')}</strong>
                   {isComradeMode ? '항목의 스위치를 내리면 그 돈이 빠졌을 때 자금이 어찌 되는지 알 수 있소. 상단의 건전도 평가를 주시하시오.' : '개별 내역의 토글 기능을 통해 지출/수입을 시뮬레이션 할 수 있습니다. 상단의 건전재정/추경필요 버튼을 통해 잔액 예측 결과를 주시하세요.'}
                 </div>
-                <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-gray-900 mb-1"><span className="mr-1">⚙️</span>{t('설정 및 데이터 관리')}</strong>
+                <div className="p-3.5 bg-blue-50/50 rounded-3xl border border-blue-100/50 leading-relaxed">
+                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">⚙️</span>{t('설정 및 데이터 관리')}</strong>
                   {isComradeMode ? '설정에서 기초 자본금액을 수정하거나, 지난 기록을 반출/반입하여 기밀을 보존하시오.' : '설정 탭에서 초기 잔액을 변경할 수 있으며, 데이터 내보내기/불러오기를 통해 안전한 백업과 복원이 가능합니다.'}
                 </div>
               </div>
               
               <button 
                 onClick={() => setIsHelpModalOpen(false)}
-                className="w-full mt-6 py-3.5 bg-[#007AFF] text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors active:scale-95"
+                className="w-full mt-6 py-3.5 bg-m3-primary text-white rounded-3xl font-semibold hover:bg-blue-700 transition-colors active:scale-95"
               >
                 {t('확인했어요!')}
               </button>
