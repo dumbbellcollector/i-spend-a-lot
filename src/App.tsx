@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
+import pako from 'pako';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
 
 // --- Types ---
@@ -61,6 +62,126 @@ interface Transaction {
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
+};
+
+// --- Extreme Compression & Flat Serialization helpers ---
+
+const toBase36 = (num: number): string => {
+  if (num < 0) return '-' + Math.abs(num).toString(36);
+  return num.toString(36);
+};
+
+const fromBase36 = (str: string): number => {
+  if (str.startsWith('-')) return -parseInt(str.slice(1), 36);
+  return parseInt(str, 36);
+};
+
+const getDaysOffset = (dateStr: string, baseStr: string): number => {
+  const date = new Date(dateStr);
+  const base = new Date(baseStr);
+  const diffTime = date.getTime() - base.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+};
+
+const addDaysToDate = (baseStr: string, days: number): string => {
+  const base = new Date(baseStr);
+  base.setDate(base.getDate() + days);
+  return format(base, 'yyyy-MM-dd');
+};
+
+const uint8ArrayToBase64 = (arr: Uint8Array): string => {
+  let binary = '';
+  const len = arr.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(arr[i]);
+  }
+  return btoa(binary);
+};
+
+const base64ToUint8Array = (base64: string): Uint8Array => {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const serializeDataV2 = (initialBalance: number, transactions: Transaction[]): string => {
+  const baseDateStr = transactions.reduce(
+    (min, t) => t.date < min ? t.date : min,
+    format(new Date(), 'yyyy-MM-dd')
+  );
+  
+  const header = `v2|${toBase36(initialBalance)}|${baseDateStr}`;
+  
+  const txStrings = transactions.map(t => {
+    const offset = getDaysOffset(t.date, baseDateStr);
+    const typeCode = t.type === 'income' ? 'I' : 'E';
+    const amountStr = toBase36(t.amount);
+    const activeStr = t.isActive ? '1' : '0';
+    const escapedMemo = t.memo
+      .replace(/\\/g, '\\\\')
+      .replace(/,/g, '\\c')
+      .replace(/;/g, '\\s')
+      .replace(/\|/g, '\\b')
+      .replace(/#/g, '\\h');
+    
+    return `${toBase36(offset)},${typeCode},${amountStr},${activeStr},${escapedMemo}`;
+  });
+  
+  return `${header}#${txStrings.join(';')}`;
+};
+
+const deserializeDataV2 = (serialized: string): { initialBalance: number; transactions: Transaction[] } => {
+  if (!serialized.includes('#')) {
+    throw new Error('Invalid format');
+  }
+  
+  const [header, txSection] = serialized.split('#');
+  const headerParts = header.split('|');
+  if (headerParts[0] !== 'v2') {
+    throw new Error('Unsupported version');
+  }
+  
+  const initialBalance = fromBase36(headerParts[1]);
+  const baseDateStr = headerParts[2];
+  
+  const transactionsList: Transaction[] = [];
+  if (txSection.trim()) {
+    const txParts = txSection.split(';');
+    txParts.forEach(txStr => {
+      if (!txStr.trim()) return;
+      const parts = txStr.split(',');
+      const offset = fromBase36(parts[0]);
+      const typeCode = parts[1];
+      const amount = fromBase36(parts[2]);
+      const isActive = parts[3] === '1';
+      
+      let unescapedMemo = parts.slice(4).join(',');
+      unescapedMemo = unescapedMemo
+        .replace(/\\c/g, ',')
+        .replace(/\\s/g, ';')
+        .replace(/\\b/g, '|')
+        .replace(/\\h/g, '#')
+        .replace(/\\\\/g, '\\');
+      
+      const date = addDaysToDate(baseDateStr, offset);
+      const id = Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5);
+      
+      transactionsList.push({
+        id,
+        date,
+        type: typeCode === 'I' ? 'income' : 'expense',
+        amount,
+        memo: unescapedMemo,
+        isActive
+      });
+    });
+  }
+  
+  return { initialBalance, transactions: transactionsList };
 };
 
 // --- Components ---
@@ -317,18 +438,26 @@ export default function App() {
     setDataSyncMode(mode);
     setSyncError('');
     if (mode === 'export') {
-      const minifiedTransactions = transactions.map(t => [
-        t.id,
-        t.date,
-        t.type === 'income' ? 'I' : 'E',
-        t.amount,
-        t.memo,
-        t.isActive ? 1 : 0
-      ]);
-      const data = { v: 1, i: initialBalance, t: minifiedTransactions };
-      const serialized = JSON.stringify(data);
-      const encoded = LZString.compressToEncodedURIComponent(serialized);
-      setSyncText(encoded);
+      try {
+        const flatString = serializeDataV2(initialBalance, transactions);
+        const compressedU8 = pako.deflate(flatString);
+        const b64 = uint8ArrayToBase64(compressedU8);
+        setSyncText(b64);
+      } catch (err) {
+        console.error('V2 export failed, falling back to V1:', err);
+        const minifiedTransactions = transactions.map(t => [
+          t.id,
+          t.date,
+          t.type === 'income' ? 'I' : 'E',
+          t.amount,
+          t.memo,
+          t.isActive ? 1 : 0
+        ]);
+        const data = { v: 1, i: initialBalance, t: minifiedTransactions };
+        const serialized = JSON.stringify(data);
+        const encoded = LZString.compressToEncodedURIComponent(serialized);
+        setSyncText(encoded);
+      }
     } else {
       setSyncText('');
     }
@@ -340,9 +469,25 @@ export default function App() {
       setSyncError('데이터를 입력해주세요.');
       return;
     }
+    const text = syncText.trim();
+    
+    // First try V2 (Ultra compressed flat DSL with Pako inflate)
+    try {
+      const decompressedBinary = base64ToUint8Array(text);
+      const inflatedText = pako.inflate(decompressedBinary, { to: 'string' });
+      if (inflatedText.startsWith('v2|')) {
+        const { initialBalance: importedInitialBalance, transactions: importedTransactions } = deserializeDataV2(inflatedText);
+        setInitialBalance(importedInitialBalance);
+        setTransactions(importedTransactions);
+        setIsDataSyncModalOpen(false);
+        return;
+      }
+    } catch (e) {
+      // Fail silently and try legacy fallbacks
+    }
+
     try {
       let decoded = '';
-      const text = syncText.trim();
       const decompressedURI = LZString.decompressFromEncodedURIComponent(text);
       const decompressedBase64 = LZString.decompressFromBase64(text);
       if (decompressedURI) {
