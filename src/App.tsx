@@ -209,6 +209,229 @@ const deserializeDataV2 = (serialized: string): { initialBalance: number; transa
   return { initialBalance, transactions: transactionsList };
 };
 
+const escapeStr = (str: string): string => {
+  if (!str) return '';
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/,/g, '\\c')
+    .replace(/;/g, '\\s')
+    .replace(/\|/g, '\\b')
+    .replace(/#/g, '\\h');
+};
+
+const unescapeStr = (str: string): string => {
+  if (!str) return '';
+  return str
+    .replace(/\\c/g, ',')
+    .replace(/\\s/g, ';')
+    .replace(/\\b/g, '|')
+    .replace(/\\h/g, '#')
+    .replace(/\\\\/g, '\\');
+};
+
+const serializeDataV3 = (
+  initialBalance: number,
+  transactions: Transaction[],
+  recurringTransactions: RecurringTransaction[] = [],
+  recurringExceptions: RecurringException[] = []
+): string => {
+  const baseDateStr = [
+    ...transactions.map(t => t.date.slice(0, 10)),
+    ...recurringTransactions.map(r => r.startDate),
+    ...recurringTransactions.filter(r => r.endDate).map(r => r.endDate!),
+    ...recurringExceptions.map(e => e.date)
+  ].reduce(
+    (min, d) => d < min ? d : min,
+    format(new Date(), 'yyyy-MM-dd')
+  );
+
+  const header = `v3|${toBase36(initialBalance)}|${baseDateStr}`;
+
+  // Establish sequential ID mapping for recurring transactions to save space (0, 1, 2...)
+  const recIdMap = new Map<string, string>();
+  recurringTransactions.forEach((r, idx) => {
+    recIdMap.set(r.id, toBase36(idx));
+  });
+
+  // Section 1: Standard transactions (ID is auto-generated on import to save precious space)
+  const txStrings = transactions.map(t => {
+    const offset = getDaysOffset(t.date, baseDateStr);
+    const typeCode = t.type === 'income' ? 'I' : 'E';
+    const amountStr = toBase36(t.amount);
+    const activeStr = t.isActive ? '1' : '0';
+    const isRecStr = t.isRecurring ? '1' : '0';
+    const recIdMapped = t.recurringId ? (recIdMap.get(t.recurringId) ?? '') : '';
+    const escMemo = escapeStr(t.memo);
+
+    return `${toBase36(offset)},${typeCode},${amountStr},${activeStr},${isRecStr},${recIdMapped},${escMemo}`;
+  });
+
+  // Section 2: Recurring rules (using sequential mapping keys instead of full random IDs)
+  const recStrings = recurringTransactions.map((r, idx) => {
+    const mappedId = toBase36(idx);
+    const startOffset = getDaysOffset(r.startDate, baseDateStr);
+    const endOffset = r.endDate ? getDaysOffset(r.endDate, baseDateStr) : '';
+    const typeCode = r.type === 'income' ? 'I' : 'E';
+    const amountStr = toBase36(r.amount);
+    const customIntervalStr = r.customInterval ? toBase36(r.customInterval) : '';
+    const escMemo = escapeStr(r.memo);
+
+    let freqCode = 'M';
+    if (r.frequency === 'daily') freqCode = 'D';
+    else if (r.frequency === 'weekly') freqCode = 'W';
+    else if (r.frequency === 'custom') freqCode = 'C';
+
+    return `${mappedId},${typeCode},${amountStr},${toBase36(startOffset)},${endOffset !== '' ? toBase36(endOffset) : ''},${freqCode},${customIntervalStr},${escMemo}`;
+  });
+
+  // Section 3: Exceptions (using sequential mapped recurring ID)
+  const excStrings = recurringExceptions.map(e => {
+    const mappedRecId = recIdMap.get(e.recurringId) ?? '';
+    const offset = getDaysOffset(e.date, baseDateStr);
+    const activeStr = e.isActive === false ? '0' : (e.isActive === true ? '1' : '');
+    const delStr = e.isDeleted === true ? '1' : '';
+
+    return `${mappedRecId},${toBase36(offset)},${activeStr},${delStr}`;
+  });
+
+  return `${header}#${txStrings.join(';')}#${recStrings.join(';')}#${excStrings.join(';')}`;
+};
+
+const deserializeDataV3 = (serialized: string): {
+  initialBalance: number;
+  transactions: Transaction[];
+  recurringTransactions: RecurringTransaction[];
+  recurringExceptions: RecurringException[];
+} => {
+  const sections = serialized.split('#');
+  const header = sections[0];
+  const headerParts = header.split('|');
+  if (headerParts[0] !== 'v3') {
+    throw new Error('Unsupported version');
+  }
+
+  const initialBalance = fromBase36(headerParts[1]);
+  const baseDateStr = headerParts[2];
+
+  const transactionsList: Transaction[] = [];
+  const recurringList: RecurringTransaction[] = [];
+  const exceptionsList: RecurringException[] = [];
+
+  const recIdNewMap = new Map<string, string>(); // oldMappedId (e.g., "0", "1") -> newUniqueId
+
+  // Section 2: Recurring rules (Parsed first to rebuild recIdNewMap mapping context)
+  const recSection = sections[2];
+  if (recSection && recSection.trim()) {
+    recSection.split(';').forEach(recStr => {
+      if (!recStr.trim()) return;
+      const parts = recStr.split(',');
+      if (parts.length < 8) return;
+      const oldMappedId = parts[0];
+      const typeCode = parts[1];
+      const amount = fromBase36(parts[2]);
+      const startOffset = fromBase36(parts[3]);
+      const endOffsetStr = parts[4];
+      const freqCode = parts[5];
+      const customIntervalStr = parts[6];
+
+      let memo = parts.slice(7).join(',');
+      memo = unescapeStr(memo);
+
+      const startDate = addDaysToDate(baseDateStr, startOffset);
+      const endDate = endOffsetStr ? addDaysToDate(baseDateStr, fromBase36(endOffsetStr)) : undefined;
+
+      let frequency: FrequencyType = 'monthly';
+      if (freqCode === 'D') frequency = 'daily';
+      else if (freqCode === 'W') frequency = 'weekly';
+      else if (freqCode === 'C') frequency = 'custom';
+
+      const customInterval = customIntervalStr ? fromBase36(customIntervalStr) : undefined;
+      
+      const newId = 'rec-' + Math.random().toString(36).substr(2, 9);
+      recIdNewMap.set(oldMappedId, newId);
+
+      recurringList.push({
+        id: newId,
+        type: typeCode === 'I' ? 'income' : 'expense',
+        amount,
+        memo,
+        startDate,
+        endDate,
+        frequency,
+        customInterval
+      });
+    });
+  }
+
+  // Section 1: Transactions
+  let txCounter = 0;
+  const txSection = sections[1];
+  if (txSection && txSection.trim()) {
+    txSection.split(';').forEach(txStr => {
+      if (!txStr.trim()) return;
+      const parts = txStr.split(',');
+      if (parts.length < 7) return;
+      const offset = fromBase36(parts[0]);
+      const typeCode = parts[1];
+      const amount = fromBase36(parts[2]);
+      const isActive = parts[3] === '1';
+      const isRecurring = parts[4] === '1';
+      const oldRecId = parts[5];
+      const newRecId = oldRecId ? (recIdNewMap.get(oldRecId) ?? oldRecId) : undefined;
+      
+      let memo = parts.slice(6).join(',');
+      memo = unescapeStr(memo);
+
+      const date = addDaysToDate(baseDateStr, offset);
+      const id = 'imp-' + Date.now().toString(36) + '-' + (txCounter++).toString(36) + '-' + Math.random().toString(36).substr(2, 4);
+
+      transactionsList.push({
+        id,
+        date,
+        type: typeCode === 'I' ? 'income' : 'expense',
+        amount,
+        memo,
+        isActive,
+        isRecurring,
+        recurringId: newRecId
+      });
+    });
+  }
+
+  // Section 3: Exceptions
+  const excSection = sections[3];
+  if (excSection && excSection.trim()) {
+    excSection.split(';').forEach(excStr => {
+      if (!excStr.trim()) return;
+      const parts = excStr.split(',');
+      if (parts.length < 4) return;
+      const oldRecId = parts[0];
+      const newRecId = recIdNewMap.get(oldRecId) ?? oldRecId;
+      const offset = fromBase36(parts[1]);
+      const activeStr = parts[2];
+      const delStr = parts[3];
+
+      const date = addDaysToDate(baseDateStr, offset);
+      const isActive = activeStr === '1' ? true : (activeStr === '0' ? false : undefined);
+      const isDeleted = delStr === '1' ? true : undefined;
+
+      exceptionsList.push({
+        recurringId: newRecId,
+        date,
+        isActive,
+        isDeleted
+      });
+    });
+  }
+
+  return {
+    initialBalance,
+    transactions: transactionsList,
+    recurringTransactions: recurringList,
+    recurringExceptions: exceptionsList
+  };
+};
+
 // --- Recurring Rules Helpers ---
 
 const getOccurrenceOnDate = (rule: RecurringTransaction, date: Date): boolean => {
@@ -737,14 +960,7 @@ export default function App() {
     setSyncError('');
     if (mode === 'export') {
       try {
-        const payload = {
-          v: 3,
-          initialBalance,
-          transactions,
-          recurringTransactions,
-          recurringExceptions
-        };
-        const flatString = 'v3|' + JSON.stringify(payload);
+        const flatString = serializeDataV3(initialBalance, transactions, recurringTransactions, recurringExceptions);
         const compressedU8 = pako.deflate(flatString);
         const b64 = uint8ArrayToBase64(compressedU8);
         setSyncText(b64);
@@ -789,12 +1005,17 @@ export default function App() {
       const decompressedBinary = base64ToUint8Array(text);
       const inflatedText = pako.inflate(decompressedBinary, { to: 'string' });
       if (inflatedText.startsWith('v3|')) {
-        const jsonStr = inflatedText.substring(3);
-        const data = JSON.parse(jsonStr);
-        setInitialBalance(data.initialBalance ?? 0);
-        setTransactions(data.transactions ?? []);
-        setRecurringTransactions(data.recurringTransactions ?? []);
-        setRecurringExceptions(data.recurringExceptions ?? []);
+        const {
+          initialBalance: importedInitialBalance,
+          transactions: importedTransactions,
+          recurringTransactions: importedRecurring,
+          recurringExceptions: importedExceptions
+        } = deserializeDataV3(inflatedText);
+        
+        setInitialBalance(importedInitialBalance);
+        setTransactions(importedTransactions);
+        setRecurringTransactions(importedRecurring);
+        setRecurringExceptions(importedExceptions);
         setIsDataSyncModalOpen(false);
         return;
       } else if (inflatedText.startsWith('v2|')) {
@@ -837,6 +1058,13 @@ export default function App() {
           memo: t[4],
           isActive: Boolean(t[5])
         }));
+      } else if (data.v === 3) {
+        setInitialBalance(data.initialBalance ?? 0);
+        setTransactions(data.transactions ?? []);
+        setRecurringTransactions(data.recurringTransactions ?? []);
+        setRecurringExceptions(data.recurringExceptions ?? []);
+        setIsDataSyncModalOpen(false);
+        return;
       } else if (typeof data.initialBalance === 'number' && Array.isArray(data.transactions)) {
         importedInitialBalance = data.initialBalance;
         importedTransactions = data.transactions;
