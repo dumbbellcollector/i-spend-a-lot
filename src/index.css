@@ -1,8 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
-@theme {
+:root {
+  /* Fonts */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Inter";
+
+  /* Brand Colors (Light Theme) */
   --color-m3-primary: #0b57d0;
   --color-m3-on-primary: #ffffff;
   --color-m3-primary-container: #d3e3fd;
@@ -17,13 +20,134 @@
   --color-m3-error: #d93025;
   --color-m3-error-container: #fce8e6;
   --color-m3-on-error-container: #370001;
+
+  /* Gray Levels (Light Theme) */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-305: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-750: #2a3341;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  /* Slate Levels (Light Theme) */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Brand Colors (Dark Theme) */
+    --color-m3-primary: #3b82f6;
+    --color-m3-on-primary: #0a0f1d;
+    --color-m3-primary-container: #1e3a8a;
+    --color-m3-on-primary-container: #eff6ff;
+    --color-m3-secondary-container: #151f32;
+    --color-m3-on-secondary-container: #cbd5e1;
+    --color-m3-surface: #0a0f1d; /* Elegant deep-dark space background */
+    --color-m3-surface-container: #121c2c; /* Slightly lighter container level */
+    --color-m3-surface-container-high: #1d2a40; /* High contrast interactive level */
+    --color-m3-outline: #64748b;
+    --color-m3-outline-variant: #253347;
+    --color-m3-error: #ef4444;
+    --color-m3-error-container: #450a0a;
+    --color-m3-on-error-container: #fecaca;
+
+    /* Gray Levels (Inverted for Dark Theme) */
+    --color-gray-50: #121c2c;
+    --color-gray-100: #151f32;
+    --color-gray-200: #1e2a40;
+    --color-gray-305: #253347;
+    --color-gray-300: #4a5568;
+    --color-gray-400: #9ca3af;
+    --color-gray-500: #cbd5e1;
+    --color-gray-600: #e2e8f0;
+    --color-gray-700: #f1f5f9;
+    --color-gray-750: #f8fafc;
+    --color-gray-800: #f8fafc;
+    --color-gray-900: #ffffff;
+
+    /* Slate Levels (Inverted for Dark Theme) */
+    --color-slate-50: #121c2c;
+    --color-slate-100: #151f32;
+    --color-slate-200: #1e2a40;
+    --color-slate-300: #253347;
+    --color-slate-400: #94a3b8;
+    --color-slate-500: #cbd5e1;
+    --color-slate-650: #cbd5e1;
+    --color-slate-600: #e2e8f0;
+    --color-slate-700: #f1f5f9;
+    --color-slate-800: #f8fafc;
+    --color-slate-900: #ffffff;
+  }
+}
+
+@theme {
+  --font-sans: var(--font-sans);
+  --color-m3-primary: var(--color-m3-primary);
+  --color-m3-on-primary: var(--color-m3-on-primary);
+  --color-m3-primary-container: var(--color-m3-primary-container);
+  --color-m3-on-primary-container: var(--color-m3-on-primary-container);
+  --color-m3-secondary-container: var(--color-m3-secondary-container);
+  --color-m3-on-secondary-container: var(--color-m3-on-secondary-container);
+  --color-m3-surface: var(--color-m3-surface);
+  --color-m3-surface-container: var(--color-m3-surface-container);
+  --color-m3-surface-container-high: var(--color-m3-surface-container-high);
+  --color-m3-outline: var(--color-m3-outline);
+  --color-m3-outline-variant: var(--color-m3-outline-variant);
+  --color-m3-error: var(--color-m3-error);
+  --color-m3-error-container: var(--color-m3-error-container);
+  --color-m3-on-error-container: var(--color-m3-on-error-container);
+
+  /* Map Standard Tailwind classes to our custom variables */
+  --color-slate-50: var(--color-slate-50);
+  --color-slate-100: var(--color-slate-100);
+  --color-slate-200: var(--color-slate-200);
+  --color-slate-300: var(--color-slate-300);
+  --color-slate-400: var(--color-slate-400);
+  --color-slate-500: var(--color-slate-500);
+  --color-slate-600: var(--color-slate-600);
+  --color-slate-700: var(--color-slate-700);
+  --color-slate-800: var(--color-slate-800);
+  --color-slate-900: var(--color-slate-900);
+
+  --color-gray-50: var(--color-gray-50);
+  --color-gray-100: var(--color-gray-100);
+  --color-gray-200: var(--color-gray-200);
+  --color-gray-300: var(--color-gray-300);
+  --color-gray-400: var(--color-gray-400);
+  --color-gray-500: var(--color-gray-500);
+  --color-gray-600: var(--color-gray-600);
+  --color-gray-700: var(--color-gray-700);
+  --color-gray-750: var(--color-gray-750);
+  --color-gray-800: var(--color-gray-800);
+  --color-gray-900: var(--color-gray-900);
 }
 
 @layer base {
   body {
-    @apply antialiased text-[#1C1C1E] bg-m3-surface min-h-[100dvh];
+    @apply antialiased text-slate-800 bg-m3-surface min-h-[100dvh];
     /* Prevent elastic scrolling/bounce on mobile if needed, though usually calendars want it */
     -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Make sure calendar cells, buttons and form controls transition smoothly */
+  div, button, input, textarea, select {
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
   /* Handle iOS Safe Areas */

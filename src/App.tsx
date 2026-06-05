@@ -608,6 +608,22 @@ const parseDynamicId = (id: string): { ruleId: string; dateStr: string } => {
 // --- Components ---
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const listener = (e: MediaQueryListEvent) => {
+      setIsDarkMode(e.matches);
+    };
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, []);
+
   const [initialBalance, setInitialBalance] = useState<number>(() => {
     const saved = localStorage.getItem('cashFlow_initialBalance');
     return saved ? Number(saved) : 1000000;
@@ -1429,7 +1445,7 @@ export default function App() {
           )}
         </div>
         
-        <div className="bg-[#E5E7EB] border border-[#E5E7EB] grid grid-cols-7 gap-[1px] rounded-xl overflow-hidden flex-1 border border-m3-surface-container-high shadow-xs mx-auto w-full">
+        <div className="bg-slate-200 border border-slate-200 grid grid-cols-7 gap-[1px] rounded-xl overflow-hidden flex-1 border border-m3-surface-container-high shadow-xs mx-auto w-full">
           {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
             <div key={day} className="bg-m3-surface py-1.5 md:py-2 text-center text-[9px] md:text-[10px] font-bold text-gray-400 border-b border-m3-surface-container-high">
               {day}
@@ -2515,18 +2531,18 @@ export default function App() {
                   <div className="h-48 w-full -ml-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={deathValleyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#1e2a40" : "#E5E7EB"} />
                         <XAxis 
                           dataKey="dateLabel" 
                           axisLine={false} 
                           tickLine={false} 
-                          tick={{ fontSize: 10, fill: '#6B7280' }} 
+                          tick={{ fontSize: 10, fill: isDarkMode ? "#94a3b8" : "#6B7280" }} 
                           dy={10}
                         />
                         <YAxis 
                           axisLine={false} 
                           tickLine={false} 
-                          tick={{ fontSize: 10, fill: '#6B7280' }}
+                          tick={{ fontSize: 10, fill: isDarkMode ? "#94a3b8" : "#6B7280" }}
                           tickFormatter={(value) => value === 0 ? '0' : `${(value / 10000).toLocaleString()}만`}
                           width={45}
                         />
