@@ -41,7 +41,9 @@ import {
   AlertTriangle,
   Repeat,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
@@ -49,39 +51,18 @@ import pako from 'pako';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
 
 // --- Types ---
+import { 
+  TransactionType, 
+  Transaction, 
+  FrequencyType, 
+  RecurringTransaction, 
+  RecurringException 
+} from './types';
 
-type TransactionType = 'income' | 'expense';
+// --- Supabase & Crypto Sync Helpers ---
+import { getSupabase } from './lib/supabase';
+import { deriveEncryptionKey, encryptAppPayload, decryptAppPayload } from './lib/crypto';
 
-interface Transaction {
-  id: string;
-  date: string; // ISO string
-  type: TransactionType;
-  amount: number;
-  memo: string;
-  isActive: boolean;
-  recurringId?: string; // ID of the recurring transaction series (if archived)
-  isRecurring?: boolean; // Flag to identify recurring transactions
-}
-
-type FrequencyType = 'daily' | 'weekly' | 'monthly' | 'custom';
-
-interface RecurringTransaction {
-  id: string;
-  type: TransactionType;
-  amount: number;
-  memo: string;
-  startDate: string; // yyyy-MM-dd
-  endDate?: string; // yyyy-MM-dd, optional
-  frequency: FrequencyType;
-  customInterval?: number; // every X days
-}
-
-interface RecurringException {
-  recurringId: string;
-  date: string; // yyyy-MM-dd
-  isActive?: boolean;  // false if toggled off
-  isDeleted?: boolean; // true if completely deleted from that day
-}
 
 // --- Utils ---
 
@@ -645,6 +626,318 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'settings' | 'calendar' | 'recurring'>('calendar');
   const [sidebarTab, setSidebarTab] = useState<'detail' | 'recurring'>('detail');
+
+  // --- Supabase Cloud Sync & Authentication States ---
+  const [supabaseUser, setSupabaseUser] = useState<any>(null);
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  const [cloudSyncError, setCloudSyncError] = useState<string>('');
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
+  const [pendingCloudData, setPendingCloudData] = useState<any>(null);
+  const [hasInitializedAuth, setHasInitializedAuth] = useState<boolean>(false);
+
+  // Supabase Auth and Popups Listener
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setHasInitializedAuth(true);
+      return;
+    }
+
+    const handleOAuthMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+        return;
+      }
+      if (event.data?.type === 'SUPABASE_AUTH_SUCCESS') {
+        console.log('Received auth success from popup, refreshing session...');
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            setSupabaseUser(session.user);
+          }
+        });
+      }
+    };
+    window.addEventListener('message', handleOAuthMessage);
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setSupabaseUser(session.user);
+      }
+      setHasInitializedAuth(true);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSupabaseUser(session?.user ?? null);
+      setHasInitializedAuth(true);
+    });
+
+    return () => {
+      window.removeEventListener('message', handleOAuthMessage);
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Google Login popup-based OAuth handler
+  const handleGoogleLogin = async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      alert('Supabase가 활성화되지 않았습니다.');
+      return;
+    }
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        }
+      });
+      if (error) throw error;
+      if (data?.url) {
+        const width = 500;
+        const height = 650;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const popup = window.open(
+          data.url,
+          'supabase_auth_popup',
+          `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+        );
+        if (!popup) {
+          alert('팝업 차단을 해제하고 다시 시도해 주세요.');
+        }
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      alert('구글 로그인 설정 중 오류가 발생했습니다: ' + err.message);
+    }
+  };
+
+  // Sign out behavior
+  const handleSignOut = async () => {
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.error('Error signing out of Supabase:', e);
+      }
+    }
+
+    // Securely wipe local React states
+    setInitialBalance(1000000);
+    setTransactions([]);
+    setRecurringTransactions([]);
+    setRecurringExceptions([]);
+
+    // Securely wipe all cashFlow related localStorage keys
+    localStorage.removeItem('cashFlow_initialBalance');
+    localStorage.removeItem('cashFlow_transactions');
+    localStorage.removeItem('cashFlow_recurringTransactions');
+    localStorage.removeItem('cashFlow_recurringExceptions');
+    localStorage.removeItem('cashFlow_months');
+    
+    if (supabaseUser) {
+      localStorage.removeItem(`cashFlow_synced_${supabaseUser.id}`);
+    }
+
+    setSupabaseUser(null);
+  };
+
+  // Fetch Cloud data and resolve conflicts once on load/auth detection
+  useEffect(() => {
+    if (!hasInitializedAuth || !supabaseUser) return;
+    
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    const checkAndSyncOnLoad = async () => {
+      setIsCloudSyncing(true);
+      setCloudSyncError('');
+      try {
+        const { data, error } = await supabase
+          .from('user_sync')
+          .select('*')
+          .eq('user_id', supabaseUser.id)
+          .maybeSingle();
+
+        if (error) {
+          // Check if table schema is missing
+          if (error.code === '42P01') {
+            setCloudSyncError('Supabase에 user_sync 테이블이 생성되지 않았습니다.\n제공된 SQL 코드를 Supabase SQL Editor에 실행해 주세요.');
+            return;
+          }
+          throw error;
+        }
+
+        const hasLocalData = transactions.length > 0 || initialBalance !== 1000000 || recurringTransactions.length > 0 || recurringExceptions.length > 0;
+        const hasSyncedOnDevice = localStorage.getItem(`cashFlow_synced_${supabaseUser.id}`) === 'true';
+
+        if (data) {
+          const key = deriveEncryptionKey(supabaseUser.id);
+          const decrypted = decryptAppPayload(
+            data.initial_balance_enc,
+            data.transactions_enc,
+            data.recurring_transactions_enc,
+            data.recurring_exceptions_enc,
+            key
+          );
+
+          const hasCloudData = decrypted.transactions.length > 0 || decrypted.initialBalance !== 1000000 || decrypted.recurringTransactions.length > 0;
+
+          if (hasLocalData && hasCloudData && !hasSyncedOnDevice) {
+            setPendingCloudData(decrypted);
+            setIsConflictModalOpen(true);
+          } else {
+            setInitialBalance(decrypted.initialBalance);
+            setTransactions(decrypted.transactions);
+            setRecurringTransactions(decrypted.recurringTransactions);
+            setRecurringExceptions(decrypted.recurringExceptions);
+            localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
+          }
+        } else {
+          if (hasLocalData) {
+            const key = deriveEncryptionKey(supabaseUser.id);
+            const payload = encryptAppPayload(
+              initialBalance,
+              transactions,
+              recurringTransactions,
+              recurringExceptions,
+              key
+            );
+
+            const { error: insertError } = await supabase
+              .from('user_sync')
+              .upsert({
+                user_id: supabaseUser.id,
+                initial_balance_enc: payload.initialBalanceEnc,
+                transactions_enc: payload.transactionsEnc,
+                recurring_transactions_enc: payload.recurringTransactionsEnc,
+                recurring_exceptions_enc: payload.recurringExceptionsEnc,
+                updated_at: new Date().toISOString()
+              });
+
+            if (insertError) {
+              console.warn('Initial push to cloud failed:', insertError);
+              setCloudSyncError('데이터 클라우드 업로드에 실패했습니다. (user_sync 테이블이 없거나 정책 오류)');
+            } else {
+              localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
+            }
+          } else {
+            localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
+          }
+        }
+      } catch (err: any) {
+        console.error('Error checking cloud sync on load:', err);
+        setCloudSyncError('서버에서 동기화 데이터를 가져오는 중 오류가 발생했습니다.');
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    };
+
+    checkAndSyncOnLoad();
+  }, [hasInitializedAuth, supabaseUser?.id]);
+
+  // Handle overwrite local with cloud
+  const handleOverwriteLocalWithCloud = () => {
+    if (pendingCloudData) {
+      setInitialBalance(pendingCloudData.initialBalance);
+      setTransactions(pendingCloudData.transactions);
+      setRecurringTransactions(pendingCloudData.recurringTransactions);
+      setRecurringExceptions(pendingCloudData.recurringExceptions);
+      if (supabaseUser) {
+        localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
+      }
+    }
+    setIsConflictModalOpen(false);
+    setPendingCloudData(null);
+  };
+
+  // Handle overwrite cloud with local
+  const handleOverwriteCloudWithLocal = async () => {
+    if (!supabaseUser) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    setIsCloudSyncing(true);
+    setCloudSyncError('');
+    try {
+      const key = deriveEncryptionKey(supabaseUser.id);
+      const payload = encryptAppPayload(
+        initialBalance,
+        transactions,
+        recurringTransactions,
+        recurringExceptions,
+        key
+      );
+
+      const { error } = await supabase
+        .from('user_sync')
+        .upsert({
+          user_id: supabaseUser.id,
+          initial_balance_enc: payload.initialBalanceEnc,
+          transactions_enc: payload.transactionsEnc,
+          recurring_transactions_enc: payload.recurringTransactionsEnc,
+          recurring_exceptions_enc: payload.recurringExceptionsEnc,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
+    } catch (err: any) {
+      console.error('Failed to overwrite cloud data:', err);
+      setCloudSyncError('클라우드에 데이터를 동기화하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsCloudSyncing(false);
+      setIsConflictModalOpen(false);
+      setPendingCloudData(null);
+    }
+  };
+
+  // Mutation Sync to Supabase cloud (Background push with debouncing)
+  useEffect(() => {
+    if (!hasInitializedAuth || !supabaseUser) return;
+    
+    const hasSyncedOnDevice = localStorage.getItem(`cashFlow_synced_${supabaseUser.id}`) === 'true';
+    if (!hasSyncedOnDevice) return;
+
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    const timer = setTimeout(async () => {
+      setIsCloudSyncing(true);
+      try {
+        const key = deriveEncryptionKey(supabaseUser.id);
+        const payload = encryptAppPayload(
+          initialBalance,
+          transactions,
+          recurringTransactions,
+          recurringExceptions,
+          key
+        );
+
+        const { error } = await supabase
+          .from('user_sync')
+          .upsert({
+            user_id: supabaseUser.id,
+            initial_balance_enc: payload.initialBalanceEnc,
+            transactions_enc: payload.transactionsEnc,
+            recurring_transactions_enc: payload.recurringTransactionsEnc,
+            recurring_exceptions_enc: payload.recurringExceptionsEnc,
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+        console.log('Auto-saved state safely to Supabase Cloud.');
+      } catch (err) {
+        console.error('Background mutation sync failed:', err);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [initialBalance, transactions, recurringTransactions, recurringExceptions, supabaseUser?.id, hasInitializedAuth]);
+
   const [editingRecurringScope, setEditingRecurringScope] = useState<'instance' | 'series'>('instance');
   const [deletingDynamicId, setDeletingDynamicId] = useState<string | null>(null);
 
@@ -1639,6 +1932,85 @@ export default function App() {
 
               {sidebarTab === 'detail' ? (
                 <div className="space-y-5">
+                  <section className="bg-slate-50/70 border border-slate-200/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                        클라우드 동기화 (Supabase)
+                      </span>
+                      {supabaseUser && (
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isCloudSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`} />
+                          <span className="text-[9.5px] font-bold text-slate-400">
+                            {isCloudSyncing ? '동기화 중...' : '동기화됨'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {!supabaseUser ? (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={handleGoogleLogin}
+                          disabled={!getSupabase()}
+                          className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-2xl font-black text-xs transition-all active:scale-95 border border-slate-200 shadow-3xs flex items-center justify-center gap-2 cursor-pointer duration-200"
+                        >
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                            <path
+                              fill="#4285F4"
+                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                            />
+                            <path
+                              fill="#34A853"
+                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            />
+                            <path
+                              fill="#FBBC05"
+                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                            />
+                            <path
+                              fill="#EA4335"
+                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                            />
+                          </svg>
+                          <span>Google 로그인</span>
+                        </button>
+                        {!getSupabase() && (
+                          <p className="text-[9.5px] text-amber-600 font-bold leading-normal text-center break-keep">
+                            ⚠️ Supabase 환경 변수가 아직 설정되지 않았습니다. AI Studio의 Settings에서 Secrets을 설정해 주세요.
+                          </p>
+                        )}
+                        <p className="text-[9.5px] text-slate-400 font-bold leading-normal text-center break-keep">
+                          구글 계정으로 로그인하면 언제 어디서나 안전하고 투명하게 암호화된 자동 동기화를 이용하실 수 있습니다.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="bg-white/85 border border-slate-100 p-3 rounded-2xl flex items-center justify-between">
+                          <div className="flex flex-col min-w-0 select-none">
+                            <span className="text-[10px] font-extrabold text-slate-400">연결된 계정</span>
+                            <span className="text-[11.5px] font-black text-slate-800 truncate select-all">{supabaseUser.email}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleSignOut}
+                            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-xl transition-colors duration-200 cursor-pointer flex items-center justify-center shrink-0"
+                            title="로그아웃"
+                          >
+                            <LogOut className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {cloudSyncError && (
+                          <div className="p-3 bg-red-50 text-rose-500 rounded-2xl">
+                            <p className="text-[10px] font-bold text-center leading-normal whitespace-pre-wrap break-keep">
+                              {cloudSyncError}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+
                   <section>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('기초 자산 설정')}</label>
                     <div className="relative">
@@ -2348,6 +2720,56 @@ export default function App() {
                     {t('저장하기')}
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Conflict Resolution Modal */}
+      <AnimatePresence>
+        {isConflictModalOpen && (
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end lg:items-center justify-center p-0 lg:p-4"
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: "100%" }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: "100%" }}
+              transition={{ ease: [0.2, 0, 0, 1], duration: 0.4 }}
+              className="bg-m3-surface w-full max-w-md rounded-t-[28px] lg:rounded-3xl border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-6 border-t lg:border border-m3-surface-container-high pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:pb-6 font-sans text-slate-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-5 lg:hidden" />
+              
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <AlertTriangle className="w-6 h-6 text-amber-500" />
+                </div>
+                <h3 className="text-lg font-extrabold text-[#1d192b] mb-1.5 leading-snug">
+                  동기화 데이터 충돌 감지
+                </h3>
+                <p className="text-xs text-gray-500 leading-relaxed max-w-sm mx-auto font-medium break-keep">
+                  기존 클라우드 데이터를 가져오시겠습니까? 아니면 현재 기기의 데이터로 클라우드를 덮어쓰시겠습니까?
+                  두 곳 모두 기존 저장 내역이 감지되어 덮어쓰기 전 조심스럽게 확인을 구합니다.
+                </p>
+              </div>
+
+              <div className="space-y-2.5">
+                <button 
+                  type="button"
+                  onClick={handleOverwriteLocalWithCloud}
+                  className="w-full py-3 px-4 bg-m3-primary text-white rounded-3xl font-extrabold text-xs hover:bg-m3-primary/95 transition-all shadow-xs active:scale-95 cursor-pointer duration-200 block text-center"
+                >
+                  기존 클라우드 데이터 불러오기
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleOverwriteCloudWithLocal}
+                  className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-3xl font-extrabold text-xs transition-all active:scale-95 border border-slate-200 shadow-3xs cursor-pointer duration-200 block text-center"
+                >
+                  현재 기기의 데이터로 클라우드 덮어쓰기 (현재 데이터로 동기화)
+                </button>
               </div>
             </motion.div>
           </div>
