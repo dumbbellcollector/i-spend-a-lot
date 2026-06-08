@@ -635,6 +635,22 @@ export default function App() {
   const [pendingCloudData, setPendingCloudData] = useState<any>(null);
   const [hasInitializedAuth, setHasInitializedAuth] = useState<boolean>(false);
 
+  // Google OAuth popup check & close mechanism
+  useEffect(() => {
+    const isCallback = window.location.hash.includes('access_token') || 
+                       window.location.hash.includes('id_token') || 
+                       window.location.search.includes('code=');
+    if (window.opener && isCallback) {
+      console.log('Detected that this window is an OAuth popup callback. Posting message to parent and closing...');
+      try {
+        window.opener.postMessage({ type: 'SUPABASE_AUTH_SUCCESS' }, '*');
+        window.close();
+      } catch (err) {
+        console.error('Failed to communicate with opener:', err);
+      }
+    }
+  }, []);
+
   // Supabase Auth and Popups Listener
   useEffect(() => {
     const supabase = getSupabase();
@@ -645,7 +661,13 @@ export default function App() {
 
     const handleOAuthMessage = (event: MessageEvent) => {
       const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+      const isAllowedOrigin = 
+        origin.endsWith('.run.app') || 
+        origin.includes('localhost') || 
+        origin.includes('vercel.app') || 
+        origin === window.location.origin;
+
+      if (!isAllowedOrigin) {
         return;
       }
       if (event.data?.type === 'SUPABASE_AUTH_SUCCESS') {
@@ -689,6 +711,7 @@ export default function App() {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/`,
+          skipBrowserRedirect: true, // Prevents parent iframe from redirecting to Google, preventing 403 pages
         }
       });
       if (error) throw error;
