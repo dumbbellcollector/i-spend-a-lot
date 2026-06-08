@@ -1166,6 +1166,34 @@ export default function App() {
       '유효하지 않은 데이터입니다.': '쓸모없는 자료입네다.',
       '텍스트가 복사되었습니다!': '암호문이 베껴졌시오!',
       '복사에 실패했습니다. 직접 선택하여 복사해주세요.': '베끼기에 실패했시오. 력량껏 베끼시라요.',
+      '달력': '류통 장부',
+      '고정지출': '배급계획',
+      '설정': '통제실',
+      '기본 설정 및 내역': '기본 자본 및 통제 규격',
+      '고정 지출 관리': '정기 배급계획 통제',
+      '월간 고정 흐름 분석': '월간 배급계획 총화',
+      '등록된 모든 고정 규칙의 한 달 기준 환산 요약입니다.': '공화국 기본 계획에 기입된 배급 수령과 생활 소모의 월간 기획 총량입네다.',
+      '고정 수입 (월)': '정기 배급 수령 (월)',
+      '고정 지출 (월)': '정기 생활 소모 (월)',
+      '순 고정 자금 (월)': '기대 순 배급량 (월)',
+      '고정 내역 추가': '정기 배급계획 등록',
+      '시뮬레이터 반영': '전투 상황판 반영',
+      '추천 고정 항목 (원클릭 입력)': '추천 고정 항목 (원클릭 입력)',
+      '내용 (메모)': '생활 명목 (메모)',
+      '수입 사연 기입': '배급 세부 영수 사유 기입',
+      '지출 사연 기입': '상납 세부 고발 사유 기입',
+      '시작일': '개시 날자',
+      '종료일 (옵션)': '종결 날자 (선택)',
+      '발생 주기': '동원 주기',
+      '매일': '매일정기 과업',
+      '매주': '주간동원 과업',
+      '매달': '월간 배급계획',
+      '직접 입력': '사적인 동원 주기 (Custom)',
+      '발생 간격 (일 단위)': '동원 간격 (일 단위)',
+      '일 마다 발생': '일 마다 령 내려짐',
+      '고정 규칙 생성하기': '배급 계획 결속하기',
+      '등록 목록': '종합 배급 대장 목록',
+      '전체': '전체 동향',
     };
     return dict[str] || str;
   };
@@ -1853,7 +1881,12 @@ export default function App() {
     return (
       <div key={month.toISOString()} className="flex-1 flex flex-col w-full">
         <div className="flex justify-between items-center mb-4 px-2 lg:px-0">
-          <h2 className="text-lg font-bold">{format(month, 'yyyy년 M월', { locale: ko })}</h2>
+          <h2 className="text-[17px] sm:text-lg font-extrabold text-slate-800 break-keep">
+            {isComradeMode 
+              ? `주체 ${month.getFullYear() - 1911}(${month.getFullYear()})년 ${month.getMonth() + 1}월`
+              : format(month, 'yyyy년 M월', { locale: ko })
+            }
+          </h2>
           {months.length > 1 && (
             <button 
               onClick={() => removeMonth(month)}
@@ -1908,18 +1941,18 @@ export default function App() {
                 {isInMonth && stats && (
                   <div className="flex flex-col items-end justify-end flex-grow w-full overflow-hidden">
                     {stats.income > 0 && (
-                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-m3-primary mb-[0.5px] tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
+                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-m3-primary mb-[0.5px] font-mono tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
                         <span className="inline sm:hidden">+{formatCalendarCompact(stats.income)}</span>
                         <span className="hidden sm:inline">+{formatCurrency(stats.income)}</span>
                       </span>
                     )}
                     {stats.expense > 0 && (
-                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-rose-600 mb-[0.5px] tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
+                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-rose-600 mb-[0.5px] font-mono tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
                         <span className="inline sm:hidden">-{formatCalendarCompact(stats.expense)}</span>
                         <span className="hidden sm:inline">-{formatCurrency(stats.expense)}</span>
                       </span>
                     )}
-                    <span className={`text-[8.5px] sm:text-[10px] md:text-[11px] font-black mt-0.5 tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block ${stats.balance < 0 ? 'text-rose-600' : 'text-slate-950'} ${isToday ? 'bg-m3-secondary-container/50 px-0.5 rounded-sm' : ''}`}>
+                    <span className={`text-[8.5px] sm:text-[10px] md:text-[11px] font-black mt-0.5 font-mono tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block ${stats.balance < 0 ? 'text-rose-600' : 'text-slate-950'} ${isToday ? 'bg-m3-secondary-container/50 px-0.5 rounded-sm' : ''}`}>
                       <span className="inline sm:hidden">{formatCalendarCompact(stats.balance)}</span>
                       <span className="hidden sm:inline">{formatCurrency(stats.balance)}</span>
                     </span>
@@ -2242,7 +2275,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         inputMode="numeric"
                         value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
                         onChange={handleInitialBalanceChange}
-                        className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-m3-surface rounded-3xl px-4 py-3 text-lg font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-m3-primary/15 transition-all tabular-nums"
+                        className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-m3-surface rounded-3xl px-4 py-3 text-lg font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-m3-primary/15 transition-all font-mono tabular-nums"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-extrabold text-xs">{isComradeMode ? '억 원' : '₩'}</span>
                     </div>
@@ -2251,14 +2284,14 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                   <section className="bg-slate-50/50 border border-slate-200/60 rounded-3xl p-4 space-y-4 shadow-3xs">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-bold">{t('총 수입 (예정)')}</span>
-                      <span className="font-extrabold text-emerald-600 tabular-nums">
-                        +<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}</span>
+                      <span className="font-extrabold text-emerald-600 font-mono tabular-nums">
+                        +<span className="font-mono tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}</span>
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-bold">{t('총 지출 (예정)')}</span>
-                      <span className="font-extrabold text-rose-600 tabular-nums">
-                        -<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}</span>
+                      <span className="font-extrabold text-rose-600 font-mono tabular-nums">
+                        -<span className="font-mono tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}</span>
                       </span>
                     </div>
                     <div className="h-px bg-slate-200/60 my-1"></div>
@@ -2267,13 +2300,13 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         {t('기말 잔액')}
                         <button 
                           onClick={() => setIsHelpModalOpen(true)}
-                          className="text-slate-400 tabular-nums tracking-tight hover:text-m3-primary transition-colors p-0.5"
+                          className="text-slate-400 font-mono tabular-nums tracking-tight hover:text-m3-primary transition-colors p-0.5"
                         >
                           <HelpCircle className="w-3.5 h-3.5" />
                         </button>
                       </span>
-                      <span className="text-lg font-black text-slate-900 tracking-tight leading-none tabular-nums">
-                        <span className="tabular-nums tracking-tight">{formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}</span>
+                      <span className="text-lg font-black text-slate-900 tracking-tight leading-none font-mono tabular-nums">
+                        <span className="font-mono tabular-nums tracking-tight">{formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}</span>
                       </span>
                     </div>
                   </section>
@@ -2296,7 +2329,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                                   {tx.id.startsWith('dynamic-') && <span className="text-m3-primary font-bold shrink-0 text-[10px]" title="고정 지출/수입 항목">🔁</span>}
                                   {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                                 </span>
-                                <span className={`text-[11px] font-black mt-0.5 tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-600'}`}>
+                                <span className={`text-[11px] font-black mt-0.5 font-mono tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-600'}`}>
                                   {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                                 </span>
                               </div>
@@ -2341,24 +2374,24 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     </div>
                     <div>
                       <h4 className="text-[10px] font-black text-indigo-200 uppercase tracking-widest flex items-center gap-1.5">
-                        <Wallet className="w-3.5 h-3.5 text-indigo-300" /> 월간 고정 흐름 분석
+                        <Wallet className="w-3.5 h-3.5 text-indigo-300" /> {t('월간 고정 흐름 분석')}
                       </h4>
                       <p className="text-[11px] text-slate-300/80 mt-1 leading-relaxed">
-                        등록된 모든 고정 규칙의 한 달 기준 환산 요약입니다.
+                        {t('등록된 모든 고정 규칙의 한 달 기준 환산 요약입니다.')}
                       </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-700/50">
                       <div className="space-y-0.5">
-                        <span className="text-[9.5px] font-bold text-slate-400 block">고정 수입 (월)</span>
-                        <div className="flex items-center gap-1 text-emerald-400 font-black text-sm tabular-nums">
+                        <span className="text-[9.5px] font-bold text-slate-400 block">{t('고정 수입 (월)')}</span>
+                        <div className="flex items-center gap-1 text-emerald-400 font-black text-sm font-mono tabular-nums">
                           <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
                           <span>+{formatCurrency(recurringOverview.income)}</span>
                         </div>
                       </div>
                       <div className="space-y-0.5">
-                        <span className="text-[9.5px] font-bold text-slate-400 block">고정 지출 (월)</span>
-                        <div className="flex items-center gap-1 text-rose-400 font-black text-sm tabular-nums">
+                        <span className="text-[9.5px] font-bold text-slate-400 block">{t('고정 지출 (월)')}</span>
+                        <div className="flex items-center gap-1 text-rose-400 font-black text-sm font-mono tabular-nums">
                           <ArrowDownCircle className="w-3.5 h-3.5 shrink-0" />
                           <span>-{formatCurrency(recurringOverview.expense)}</span>
                         </div>
@@ -2366,8 +2399,8 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     </div>
 
                     <div className="bg-white/5 rounded-2xl p-3 flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-200">순 고정 자금 (월)</span>
-                      <span className={`text-sm font-black tabular-nums ${recurringOverview.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <span className="text-xs font-bold text-slate-200">{t('순 고정 자금 (월)')}</span>
+                      <span className={`text-sm font-black font-mono tabular-nums ${recurringOverview.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {recurringOverview.net >= 0 ? '+' : ''}{formatCurrency(recurringOverview.net)}
                       </span>
                     </div>
@@ -2377,10 +2410,10 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                   <section className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 space-y-4 shadow-3xs">
                     <div className="flex justify-between items-center">
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> 고정 내역 추가
+                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> {t('고정 내역 추가')}
                       </h3>
                       <span className="text-[10px] text-m3-primary font-bold bg-m3-primary-container/40 px-2 py-0.5 rounded-full">
-                        시뮬레이터 반영
+                        {t('시뮬레이터 반영')}
                       </span>
                     </div>
                     
@@ -2391,36 +2424,52 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         onClick={() => setRecType('income')}
                         className={`py-1.5 rounded-full transition-colors text-center cursor-pointer ${recType === 'income' ? 'bg-m3-primary text-white shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        수입
+                        {t('수입')}
                       </button>
                       <button 
                         type="button"
                         onClick={() => setRecType('expense')}
                         className={`py-1.5 rounded-full transition-colors text-center cursor-pointer ${recType === 'expense' ? 'bg-rose-600 text-white shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        지출
+                        {t('지출')}
                       </button>
                     </div>
 
                     {/* 추천 템플릿 (원클릭 레이아웃) */}
                     <div className="space-y-1.5">
-                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">추천 고정 항목 (원클릭 입력)</label>
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">{t('추천 고정 항목 (원클릭 입력)')}</label>
                       <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-200">
-                        {(recType === 'income' 
-                          ? [
-                              { memo: '급여 (월급)', type: 'income', amount: 3500000, frequency: 'monthly', icon: '💼' },
-                              { memo: '아르바이트', type: 'income', amount: 950000, frequency: 'monthly', icon: '⚡' },
-                              { memo: '정기 용돈', type: 'income', amount: 300000, frequency: 'monthly', icon: '🧸' },
-                              { memo: '투자 배당금', type: 'income', amount: 150000, frequency: 'monthly', icon: '📈' }
-                            ]
-                          : [
-                              { memo: '유튜브 프리미엄', type: 'expense', amount: 14900, frequency: 'monthly', icon: '📺' },
-                              { memo: '넷플릭스', type: 'expense', amount: 17000, frequency: 'monthly', icon: '🎬' },
-                              { memo: '월세 납부', type: 'expense', amount: 550000, frequency: 'monthly', icon: '🏠' },
-                              { memo: '통신 요금', type: 'expense', amount: 69000, frequency: 'monthly', icon: '📱' },
-                              { memo: '헬스장/피트니스', type: 'expense', amount: 50000, frequency: 'monthly', icon: '🏋️' },
-                              { memo: '실비 보험료', type: 'expense', amount: 45000, frequency: 'monthly', icon: '🛡️' }
-                            ]
+                        {(isComradeMode
+                          ? (recType === 'income'
+                            ? [
+                                { memo: '민생회복지원금', type: 'income', amount: 25, frequency: 'monthly', icon: '🧧' },
+                                { memo: '중국동포지원금', type: 'income', amount: 30, frequency: 'monthly', icon: '🇨🇳' },
+                                { memo: '고유가지원금', type: 'income', amount: 15, frequency: 'monthly', icon: '⛽' },
+                                { memo: '지하 혁명 지원금', type: 'income', amount: 50, frequency: 'monthly', icon: '🌾' }
+                              ]
+                            : [
+                                { memo: '당비 납부 (상납)', type: 'expense', amount: 10, frequency: 'monthly', icon: '🚩' },
+                                { memo: '배급소 식수 분담금', type: 'expense', amount: 5, frequency: 'monthly', icon: '🚰' },
+                                { memo: '공화국 국방 헌금', type: 'expense', amount: 20, frequency: 'monthly', icon: '🚀' },
+                                { memo: '러시아 용병 지원금', type: 'expense', amount: 35, frequency: 'monthly', icon: '🇷🇺' }
+                              ]
+                            )
+                          : (recType === 'income' 
+                            ? [
+                                { memo: '급여 (월급)', type: 'income', amount: 3500000, frequency: 'monthly', icon: '💼' },
+                                { memo: '아르바이트', type: 'income', amount: 950000, frequency: 'monthly', icon: '⚡' },
+                                { memo: '정기 용돈', type: 'income', amount: 300000, frequency: 'monthly', icon: '🧸' },
+                                { memo: '투자 배당금', type: 'income', amount: 150000, frequency: 'monthly', icon: '📈' }
+                              ]
+                            : [
+                                { memo: '유튜브 프리미엄', type: 'expense', amount: 14900, frequency: 'monthly', icon: '📺' },
+                                { memo: '넷플릭스', type: 'expense', amount: 17000, frequency: 'monthly', icon: '🎬' },
+                                { memo: '월세 납부', type: 'expense', amount: 550000, frequency: 'monthly', icon: '🏠' },
+                                { memo: '통신 요금', type: 'expense', amount: 69000, frequency: 'monthly', icon: '📱' },
+                                { memo: '헬스장/피트니스', type: 'expense', amount: 50000, frequency: 'monthly', icon: '🏋️' },
+                                { memo: '실비 보험료', type: 'expense', amount: 45000, frequency: 'monthly', icon: '🛡️' }
+                              ]
+                            )
                         ).map((preset) => (
                           <button
                             key={preset.memo}
@@ -2480,7 +2529,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">종료일 (옵션)</label>
+                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">{t('종료일 (옵션)')}</label>
                         <input
                           type="date"
                           value={recEndDate}
@@ -2491,22 +2540,22 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">발생 주기</label>
+                      <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">{t('발생 주기')}</label>
                       <select
                         value={recFrequency}
                         onChange={(e) => setRecFrequency(e.target.value as FrequencyType)}
                         className="w-full bg-m3-surface border border-slate-200 rounded-3xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-m3-primary/20"
                       >
-                        <option value="daily">매일 (Daily)</option>
-                        <option value="weekly">매주 (Weekly)</option>
-                        <option value="monthly">매달 (Monthly)</option>
-                        <option value="custom">직접 입력 (Custom interval)</option>
+                        <option value="daily">{t('매일')}</option>
+                        <option value="weekly">{t('매주')}</option>
+                        <option value="monthly">{t('매달')}</option>
+                        <option value="custom">{t('직접 입력')}</option>
                       </select>
                     </div>
 
                     {recFrequency === 'custom' && (
                       <div className="space-y-1">
-                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">발생 간격 (일 단위)</label>
+                        <label className="text-[9.5px] text-slate-400 font-bold uppercase tracking-wide block">{t('발생 간격 (일 단위)')}</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -2515,7 +2564,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                             onChange={(e) => setRecCustomInterval(Math.max(1, parseInt(e.target.value) || 1))}
                             className="w-16 bg-m3-surface border border-slate-200 rounded-3xl px-2 py-1.5 text-xs font-black text-center focus:outline-none focus:ring-1 focus:ring-m3-primary/20"
                           />
-                          <span className="text-xs font-bold text-slate-500">일 마다 발생</span>
+                          <span className="text-xs font-bold text-slate-500">{t('일 마다 발생')}</span>
                         </div>
                       </div>
                     )}
@@ -2525,7 +2574,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                       onClick={addRecurringRule}
                       className="w-full py-2.5 bg-m3-primary text-white rounded-full text-xs font-extrabold hover:bg-m3-primary/90 transition-colors active:scale-95 shadow-3xs"
                     >
-                      고정 규칙 생성하기
+                      {t('고정 규칙 생성하기')}
                     </button>
                   </section>
 
@@ -2592,8 +2641,8 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                                     <span>기간: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(무기한)'}</span>
                                   </span>
                                 </div>
-                                <div className={`text-[12px] font-black mt-2 tracking-tight tabular-nums ${isInc ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  <span className="tabular-nums tracking-tight">
+                                <div className={`text-[12px] font-black mt-2 tracking-tight font-mono tabular-nums ${isInc ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  <span className="font-mono tabular-nums tracking-tight">
                                     {isInc ? '+' : '-'}{formatCurrency(rule.amount)}
                                   </span>
                                 </div>
@@ -2621,34 +2670,36 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
             </div>
 
             {/* Bottom Actions of Sidebar */}
-            <div className="pt-6 border-t border-slate-200/50 space-y-3 mt-6 shrink-0 z-10 w-full bg-m3-surface">
-              <button 
-                onClick={() => {
-                  setKeepInitialBalance(false);
-                  setKeepFutureRecurringRules(false);
-                  setKeepPastRecurringRecords(false);
-                  setIsResetOptionsExpanded(false);
-                  setIsResetModalOpen(true);
-                }}
-                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full font-black text-xs transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs"
-              >
-                {t('데이터 초기화')}
-              </button>
-              <div className="grid grid-cols-2 gap-2">
+            {sidebarTab === 'detail' && (
+              <div className="pt-6 border-t border-slate-200/50 space-y-3 mt-6 shrink-0 z-10 w-full bg-m3-surface">
                 <button 
-                  onClick={() => openDataSyncModal('export')}
-                  className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
+                  onClick={() => {
+                    setKeepInitialBalance(false);
+                    setKeepFutureRecurringRules(false);
+                    setKeepPastRecurringRecords(false);
+                    setIsResetOptionsExpanded(false);
+                    setIsResetModalOpen(true);
+                  }}
+                  className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full font-black text-xs transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs"
                 >
-                  <Upload size={13} /> {t('내보내기')}
+                  {t('데이터 초기화')}
                 </button>
-                <button 
-                  onClick={() => openDataSyncModal('import')}
-                  className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
-                >
-                  <Download size={13} /> {t('불러오기')}
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => openDataSyncModal('export')}
+                    className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
+                  >
+                    <Upload size={13} /> {t('내보내기')}
+                  </button>
+                  <button 
+                    onClick={() => openDataSyncModal('import')}
+                    className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
+                  >
+                    <Download size={13} /> {t('불러오기')}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </aside>
 
@@ -2755,12 +2806,12 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                   const total = income - expense;
                   return (
                     <div className="text-[13px] font-medium text-gray-600 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-m3-primary tabular-nums tracking-tight">+<span className="tabular-nums tracking-tight">{formatCurrency(income)}</span></span>
-                      <span className="text-gray-400 tabular-nums tracking-tight">-</span>
-                      <span className="text-m3-error tabular-nums tracking-tight"><span className="tabular-nums tracking-tight">{formatCurrency(expense)}</span></span>
-                      <span className="text-gray-400 tabular-nums tracking-tight">=</span>
-                      <span className={`font-bold ${total >= 0 ? 'text-m3-primary' : 'text-m3-error'}`}>
-                        {total > 0 ? '+' : ''}<span className="tabular-nums tracking-tight">{formatCurrency(total)}</span>
+                      <span className="text-m3-primary font-mono tabular-nums tracking-tight">+<span className="font-mono tabular-nums tracking-tight">{formatCurrency(income)}</span></span>
+                      <span className="text-gray-400 font-mono tabular-nums tracking-tight">-</span>
+                      <span className="text-m3-error font-mono tabular-nums tracking-tight"><span className="font-mono tabular-nums tracking-tight">{formatCurrency(expense)}</span></span>
+                      <span className="text-gray-400 font-mono tabular-nums tracking-tight">=</span>
+                      <span className={`font-bold font-mono ${total >= 0 ? 'text-m3-primary' : 'text-m3-error'}`}>
+                        {total > 0 ? '+' : ''}<span className="font-mono tabular-nums tracking-tight">{formatCurrency(total)}</span>
                       </span>
                     </div>
                   );
@@ -2791,7 +2842,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                           {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[11px]" title="고정 지출/수입 항목">🔁</span>}
                           {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                         </span>
-                        <span className={`text-[12px] mt-0.5 font-bold ${tx.type === 'income' ? 'text-m3-primary' : 'text-m3-error'}`}>
+                        <span className={`text-[12px] mt-0.5 font-bold font-mono tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-m3-error'}`}>
                           {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                         </span>
                       </div>
@@ -3166,9 +3217,14 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                   <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-3xl">
                     <p className="text-xs text-orange-800 font-medium mb-1">{t('예상 최저 잔액 발생일')}</p>
                     <p className="text-lg font-bold text-orange-600 flex justify-between items-end">
-                      <span>{format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })}</span>
-                      <span className={`text-[15px] ${deathValleyInfo.balance < 0 ? 'text-m3-error' : 'text-[#1d192b]'}`}>
-                        <span className="tabular-nums tracking-tight">{formatCurrency(deathValleyInfo.balance)}</span>
+                      <span>
+                        {isComradeMode 
+                          ? `주체 ${deathValleyInfo.date.getFullYear() - 1911}(${deathValleyInfo.date.getFullYear()})년 ${deathValleyInfo.date.getMonth() + 1}월 ${deathValleyInfo.date.getDate()}일`
+                          : format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })
+                        }
+                      </span>
+                      <span className={`text-[15px] font-mono tabular-nums ${deathValleyInfo.balance < 0 ? 'text-m3-error' : 'text-[#1d192b]'}`}>
+                        <span className="font-mono tabular-nums tracking-tight">{formatCurrency(deathValleyInfo.balance)}</span>
                       </span>
                     </p>
                   </div>
@@ -3195,10 +3251,10 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                           content={({ active, payload }) => {
                             if (active && payload && payload.length) {
                               return (
-                                <div className="bg-m3-surface border border-m3-surface-container-high border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-2 rounded-xl text-xs">
+                                <div className="bg-m3-surface border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-2 rounded-xl text-xs">
                                   <p className="text-gray-500 mb-1">{payload[0].payload.date}</p>
-                                  <p className={`font-bold ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-m3-error' : 'text-m3-primary'}`}>
-                                    <span className="tabular-nums tracking-tight">{formatCurrency(Number(payload[0].value))}</span>
+                                  <p className={`font-bold font-mono ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-m3-error' : 'text-m3-primary'}`}>
+                                    <span className="font-mono tabular-nums tracking-tight">{formatCurrency(Number(payload[0].value))}</span>
                                   </p>
                                 </div>
                               );
@@ -3354,15 +3410,15 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
               <div className="space-y-3 text-sm text-gray-600">
                 <div className="p-3.5 bg-blue-50/50 rounded-3xl border border-blue-100/50 leading-relaxed">
                   <strong className="block text-[#1d192b] mb-1"><span className="mr-1">📅</span>{t('내역 관리하기')}</strong>
-                  {isComradeMode ? '달력 일자를 두 번 쳐서 기입하고, 명단 항목을 다시 눌러 수정하시오.' : '달력 날짜를 더블 탭하여 수입/지출을 등록하고, 날짜 선택 후 나타나는 개별 내역을 탭하여 즉시 수정/삭제할 수 있습니다.'}
+                  {isComradeMode ? '달력 일자를 가볍게 치거나 두 번 쳐서 기입하고, 아래 명찰 목록을 다시 눌러 간편하게 수정 및 삭제하시오.' : '달력 날짜를 가볍게 선택하거나 더블 탭하여 간편하게 등록하고, 날짜 선택 후 아래 나타나는 항목을 터치해 즉시 수정/삭제하세요.'}
                 </div>
                 <div className="p-3.5 bg-blue-50/50 rounded-3xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">💰</span>{t('재정 시뮬레이션')}</strong>
-                  {isComradeMode ? '항목의 스위치를 내리면 그 돈이 빠졌을 때 자금이 어찌 되는지 알 수 있소. 상단의 건전도 평가를 주시하시오.' : '개별 내역의 토글 기능을 통해 지출/수입을 시뮬레이션 할 수 있습니다. 상단의 건전재정/추경필요 버튼을 통해 잔액 예측 결과를 주시하세요.'}
+                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">🔁</span>{t('고정 항목 자동 반영')}</strong>
+                  {isComradeMode ? '매달 기여하는 계획 재정이나 반복 세금 등은 고정지출 탭에 한 번만 등록하여 국가적 수령금으로 자동 반영시키시오.' : '매월 반복되는 급여, 적금, 생활비 등은 고정지출 탭에 한 번 등록해 두면 자동으로 기말 잔액 흐름을 예측하고 채워 줍니다.'}
                 </div>
                 <div className="p-3.5 bg-blue-50/50 rounded-3xl border border-blue-100/50 leading-relaxed">
-                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">⚙️</span>{t('설정 및 데이터 관리')}</strong>
-                  {isComradeMode ? '설정에서 기초 자본금액을 수정하거나, 지난 기록을 반출/반입하여 기밀을 보존하시오.' : '설정 탭에서 초기 잔액을 변경할 수 있으며, 데이터 내보내기/불러오기를 통해 안전한 백업과 복원이 가능합니다.'}
+                  <strong className="block text-[#1d192b] mb-1"><span className="mr-1">☁️</span>{t('실시간 계정 연동')}</strong>
+                  {isComradeMode ? '설정 탭에서 Google로 로그인하여 동기화를 개시하면, 공화국 안전 클라우드에 귀하의 기밀 정보가 실시간 대기 대조 보존되오.' : '설정 탭에서 Google 계정으로 로그인해 실시간 데이터 동기화를 켜 주시면, 기기를 바꾸거나 재시작해도 소중한 자산 계획을 안전하게 이어 복구할 수 있습니다.'}
                 </div>
               </div>
               

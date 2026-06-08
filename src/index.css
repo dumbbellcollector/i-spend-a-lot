@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
   /* Fonts */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Inter";
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Brand Colors (Light Theme) */
   --color-m3-primary: #0b57d0;
@@ -97,6 +98,7 @@
 
 @theme {
   --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
   --color-m3-primary: var(--color-m3-primary);
   --color-m3-on-primary: var(--color-m3-on-primary);
   --color-m3-primary-container: var(--color-m3-primary-container);
