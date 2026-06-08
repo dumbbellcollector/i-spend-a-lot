@@ -43,7 +43,9 @@ import {
   ChevronDown,
   ChevronUp,
   LogIn,
-  LogOut
+  LogOut,
+  Copy,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
@@ -634,6 +636,8 @@ export default function App() {
   const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
   const [pendingCloudData, setPendingCloudData] = useState<any>(null);
   const [hasInitializedAuth, setHasInitializedAuth] = useState<boolean>(false);
+  const [isSqlHelpOpen, setIsSqlHelpOpen] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
 
   // Google OAuth popup check & close mechanism
   useEffect(() => {
@@ -878,7 +882,7 @@ export default function App() {
         if (error) {
           // Check if table schema is missing
           if (error.code === '42P01') {
-            setCloudSyncError('Supabase에 user_sync 테이블이 생성되지 않았습니다.\n제공된 SQL 코드를 Supabase SQL Editor에 실행해 주세요.');
+            setCloudSyncError('Supabase에 user_sync 테이블이 생성되지 않았습니다.\n아래의 [Supabase 테이블 및 RLS 설정 가이드]에 따라 SQL을 실행해 주세요.');
             return;
           }
           throw error;
@@ -933,7 +937,10 @@ export default function App() {
 
             if (insertError) {
               console.warn('Initial push to cloud failed:', insertError);
-              setCloudSyncError('데이터 클라우드 업로드에 실패했습니다. (user_sync 테이블이 없거나 정책 오류)');
+              const errMsg = insertError?.message || String(insertError);
+              const errCode = insertError?.code ? `[코드: ${insertError.code}] ` : '';
+              const errDetails = insertError?.details ? ` (${insertError.details})` : '';
+              setCloudSyncError(`데이터 클라우드 업로드에 실패했습니다.\n${errCode}${errMsg}${errDetails}\n\n⚠️ Supabase의 user_sync 테이블 설정이나 승인(RLS) 정책 오류일 수 있습니다. 아래의 가이드를 참조해 테이블 및 RLS 설정을 꼭 완료해 주세요.`);
             } else {
               localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
             }
@@ -943,7 +950,10 @@ export default function App() {
         }
       } catch (err: any) {
         console.error('Error checking cloud sync on load:', err);
-        setCloudSyncError('서버에서 동기화 데이터를 가져오는 중 오류가 발생했습니다.');
+        const errMsg = err?.message || String(err);
+        const errCode = err?.code ? `[코드: ${err.code}] ` : '';
+        const errDetails = err?.details ? ` (${err.details})` : '';
+        setCloudSyncError(`서버에서 동기화 데이터를 가져오는 중 오류가 발생했습니다.\n${errCode}${errMsg}${errDetails}\n\n💡 Supabase 프로젝트에 user_sync 테이블이 없거나, RLS(행 보안 권한) 정책이 올바르게 구성되지 않았을 가능성이 큽니다. 아래의 2단계 해결 가이드를 따라 설치해 주세요!`);
       } finally {
         setIsCloudSyncing(false);
       }
@@ -1000,7 +1010,9 @@ export default function App() {
       localStorage.setItem(`cashFlow_synced_${supabaseUser.id}`, 'true');
     } catch (err: any) {
       console.error('Failed to overwrite cloud data:', err);
-      setCloudSyncError('클라우드에 데이터를 동기화하는 중 오류가 발생했습니다.');
+      const errMsg = err?.message || String(err);
+      const errCode = err?.code ? `[코드: ${err.code}] ` : '';
+      setCloudSyncError(`클라우드에 데이터를 동기화하는 중 오류가 발생했습니다.\n${errCode}${errMsg}`);
     } finally {
       setIsCloudSyncing(false);
       setIsConflictModalOpen(false);
@@ -2112,10 +2124,110 @@ export default function App() {
                           </button>
                         </div>
                         {cloudSyncError && (
-                          <div className="p-3 bg-red-50 text-rose-500 rounded-2xl">
-                            <p className="text-[10px] font-bold text-center leading-normal whitespace-pre-wrap break-keep">
-                              {cloudSyncError}
-                            </p>
+                          <div className="space-y-3">
+                            <div className="p-3.5 bg-red-50/80 border border-red-100/70 text-rose-600 rounded-2xl">
+                              <p className="text-[10px] font-bold leading-normal whitespace-pre-wrap break-keep">
+                                {cloudSyncError}
+                              </p>
+                            </div>
+                            
+                            {/* Expandable SQL Guide Card */}
+                            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-3xs transition-all">
+                              <button
+                                type="button"
+                                onClick={() => setIsSqlHelpOpen(!isSqlHelpOpen)}
+                                className="w-full flex items-center justify-between text-left text-xs font-black text-slate-700 hover:text-slate-900 cursor-pointer select-none"
+                              >
+                                <span className="flex items-center gap-1.5">🛠️ Supabase 테이블 및 RLS 설정 가이드</span>
+                                {isSqlHelpOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                              </button>
+                              
+                              {isSqlHelpOpen && (
+                                <div className="space-y-3 text-[10.5px] text-slate-600 leading-normal border-t border-slate-200/50 pt-2.5 animate-fade-in">
+                                  <p className="font-extrabold text-slate-700">간단한 2단계 지침으로 동기화 문제를 즉시 해결할 수 있습니다:</p>
+                                  
+                                  <div className="space-y-1 bg-white p-2.5 border border-slate-100 rounded-xl shadow-4xs">
+                                    <p className="font-black text-slate-700">1단계. Supabase SQL Editor 열기</p>
+                                    <p className="font-medium text-slate-500 text-[10px]">
+                                      본인의 Supabase 프로젝트 대시보드의 왼쪽 메뉴에서 <strong className="text-slate-800">SQL Editor</strong>를 클릭하고, 상단의 <strong className="text-slate-800">New Query</strong>를 눌러 새로운 SQL 쿼리 생성창을 엽니다.
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-2.5 bg-white p-2.5 border border-slate-100 rounded-xl shadow-4xs">
+                                    <div className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200/30">
+                                      <p className="font-black text-slate-700">2단계. 아래 쿼리 복사 & 실행</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const sqlCode = `CREATE TABLE IF NOT EXISTS public.user_sync (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    initial_balance_enc TEXT,
+    transactions_enc TEXT,
+    recurring_transactions_enc TEXT,
+    recurring_exceptions_enc TEXT,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.user_sync ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow select for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow insert/update for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow all for owner" ON public.user_sync;
+
+CREATE POLICY "Allow all for owner" ON public.user_sync
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);`;
+                                          navigator.clipboard.writeText(sqlCode);
+                                          setCopiedSql(true);
+                                          setTimeout(() => setCopiedSql(false), 2000);
+                                        }}
+                                        className="flex items-center gap-1 px-2 py-0.5 bg-m3-primary hover:bg-m3-primary/95 text-white rounded-md font-bold text-[9.5px] transition-all cursor-pointer shadow-3xs"
+                                      >
+                                        {copiedSql ? (
+                                          <>
+                                            <Check className="w-2.5 h-2.5" />
+                                            <span>복사완료!</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-2.5 h-2.5" />
+                                            <span>SQL 복사</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                    
+                                    <pre className="p-2 bg-slate-900 text-slate-200 rounded-lg text-[8.5px] font-mono overflow-x-auto max-h-40 leading-relaxed select-all no-scrollbar">
+{`CREATE TABLE IF NOT EXISTS public.user_sync (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    initial_balance_enc TEXT,
+    transactions_enc TEXT,
+    recurring_transactions_enc TEXT,
+    recurring_exceptions_enc TEXT,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.user_sync ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow select for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow insert/update for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow all for owner" ON public.user_sync;
+
+CREATE POLICY "Allow all for owner" ON public.user_sync
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);`}
+                                    </pre>
+                                    <p className="text-slate-500 font-medium text-[10px] break-keep leading-tight">
+                                      위 코드를 복사하여 SQL Editor에 붙여넣은 뒤, 우측 하단의 <strong className="text-slate-800">Run</strong> 버튼을 눌러 성공적으로 실행해 주세요. 실행한 뒤 본 예산 달력 페이지를 새로고침(F5)하여 다시 로그인하시면 완벽히 자동 연동이 시작됩니다!
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
