@@ -641,13 +641,67 @@ export default function App() {
                        window.location.hash.includes('id_token') || 
                        window.location.search.includes('code=');
     if (window.opener && isCallback) {
-      console.log('Detected that this window is an OAuth popup callback. Posting message to parent and closing...');
-      try {
-        window.opener.postMessage({ type: 'SUPABASE_AUTH_SUCCESS' }, '*');
+      const supabase = getSupabase();
+      if (!supabase) {
+        try {
+          window.opener.postMessage({ type: 'SUPABASE_AUTH_SUCCESS' }, '*');
+        } catch (e) {}
         window.close();
-      } catch (err) {
-        console.error('Failed to communicate with opener:', err);
+        return;
       }
+
+      console.log('Popup detected OAuth callback. Subscribing to auth state change...');
+      
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+        if (session) {
+          console.log('Session established in popup. Messaging opener and closing...', event);
+          try {
+            window.opener.postMessage({ 
+              type: 'SUPABASE_AUTH_SUCCESS', 
+              session: {
+                access_token: session.access_token,
+                refresh_token: session.refresh_token
+              }
+            }, '*');
+          } catch (e) {
+            console.error('Failed to postMessage to opener:', e);
+          }
+          setTimeout(() => {
+            window.close();
+          }, 300);
+        }
+      });
+
+      // Quick active check
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          try {
+            window.opener.postMessage({ 
+              type: 'SUPABASE_AUTH_SUCCESS', 
+              session: {
+                access_token: session.access_token,
+                refresh_token: session.refresh_token
+              }
+            }, '*');
+          } catch (e) {}
+          setTimeout(() => {
+            window.close();
+          }, 300);
+        }
+      });
+
+      const timeoutId = setTimeout(() => {
+        console.warn('Popup timeout reached, closing...');
+        try {
+          window.opener.postMessage({ type: 'SUPABASE_AUTH_SUCCESS' }, '*');
+        } catch (e) {}
+        window.close();
+      }, 5000);
+
+      return () => {
+        subscription.unsubscribe();
+        clearTimeout(timeoutId);
+      };
     }
   }, []);
 
@@ -671,15 +725,51 @@ export default function App() {
         return;
       }
       if (event.data?.type === 'SUPABASE_AUTH_SUCCESS') {
-        console.log('Received auth success from popup, refreshing session...');
+        console.log('Received auth success from popup, setting session...');
+        const rxSession = event.data?.session;
+        if (rxSession?.access_token && rxSession?.refresh_token) {
+          supabase.auth.setSession({
+            access_token: rxSession.access_token,
+            refresh_token: rxSession.refresh_token
+          }).then(({ data, error }) => {
+            if (error) {
+              console.error('setSession failed on parent:', error);
+            }
+            if (data?.user) {
+              setSupabaseUser(data.user);
+            }
+          });
+        } else {
+          // Fallback, fetch session
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+              setSupabaseUser(session.user);
+            }
+          });
+        }
+      }
+    };
+
+    // Robust multi-layered fallback sync listeners
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key && e.key.includes('-auth-token')) {
+        console.log('Detected storage auth change. Synchronizing parent session...');
         supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user) {
-            setSupabaseUser(session.user);
-          }
+          setSupabaseUser(session?.user ?? null);
         });
       }
     };
+
+    const handleFocus = () => {
+      console.log('Parent window focused. Re-checking session states...');
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSupabaseUser(session?.user ?? null);
+      });
+    };
+
     window.addEventListener('message', handleOAuthMessage);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleFocus);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -695,6 +785,8 @@ export default function App() {
 
     return () => {
       window.removeEventListener('message', handleOAuthMessage);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
       subscription.unsubscribe();
     };
   }, []);
@@ -1958,7 +2050,7 @@ export default function App() {
                   <section className="bg-slate-50/70 border border-slate-200/60 rounded-3xl p-4 space-y-3 shadow-3xs">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                        클라우드 동기화 (Supabase)
+                        클라우드 동기화
                       </span>
                       {supabaseUser && (
                         <div className="flex items-center gap-1.5">
@@ -1969,7 +2061,6 @@ export default function App() {
                         </div>
                       )}
                     </div>
-
                     {!supabaseUser ? (
                       <div className="space-y-2">
                         <button
@@ -2003,9 +2094,6 @@ export default function App() {
                             ⚠️ Supabase 환경 변수가 아직 설정되지 않았습니다. AI Studio의 Settings에서 Secrets을 설정해 주세요.
                           </p>
                         )}
-                        <p className="text-[9.5px] text-slate-400 font-bold leading-normal text-center break-keep">
-                          구글 계정으로 로그인하면 언제 어디서나 안전하고 투명하게 암호화된 자동 동기화를 이용하실 수 있습니다.
-                        </p>
                       </div>
                     ) : (
                       <div className="space-y-3">
