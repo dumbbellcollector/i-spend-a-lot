@@ -588,6 +588,53 @@ const parseDynamicId = (id: string): { ruleId: string; dateStr: string } => {
   return { ruleId, dateStr };
 };
 
+const getFirstOccurrenceOnOrAfter = (rule: RecurringTransaction, minDate: Date): Date => {
+  const ruleStart = parseISO(rule.startDate);
+  const minClean = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
+  
+  const dStart = new Date(ruleStart.getFullYear(), ruleStart.getMonth(), ruleStart.getDate());
+  if (dStart >= minClean) {
+    return dStart;
+  }
+
+  if (rule.frequency === 'monthly') {
+    const startDay = ruleStart.getDate();
+    let checkMonth = new Date(minClean.getFullYear(), minClean.getMonth(), 1);
+    for (let i = 0; i < 120; i++) {
+      const targetMonthLastDay = new Date(checkMonth.getFullYear(), checkMonth.getMonth() + 1, 0).getDate();
+      const expectedDay = Math.min(startDay, targetMonthLastDay);
+      const possibleDate = new Date(checkMonth.getFullYear(), checkMonth.getMonth(), expectedDay);
+      if (possibleDate >= minClean) {
+        return possibleDate;
+      }
+      checkMonth = addMonths(checkMonth, 1);
+    }
+    return minClean;
+  }
+
+  let current = dStart;
+  let iterations = 0;
+  while (current < minClean && iterations < 5000) {
+    iterations++;
+    switch (rule.frequency) {
+      case 'daily':
+        current = addDays(current, 1);
+        break;
+      case 'weekly':
+        current = addDays(current, 7);
+        break;
+      case 'custom': {
+        const interval = rule.customInterval || 1;
+        current = addDays(current, interval);
+        break;
+      }
+      default:
+        return minClean;
+    }
+  }
+  return current;
+};
+
 // --- Components ---
 
 export default function App() {
@@ -1108,6 +1155,7 @@ export default function App() {
   const [keepInitialBalance, setKeepInitialBalance] = useState(false);
   const [keepFutureRecurringRules, setKeepFutureRecurringRules] = useState(false);
   const [keepPastRecurringRecords, setKeepPastRecurringRecords] = useState(false);
+  const [keepTodayAndFutureRecords, setKeepTodayAndFutureRecords] = useState(false);
   const [isResetOptionsExpanded, setIsResetOptionsExpanded] = useState(false);
   const [isDataSyncModalOpen, setIsDataSyncModalOpen] = useState(false);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
@@ -1194,6 +1242,8 @@ export default function App() {
       '고정 규칙 생성하기': '배급 계획 결속하기',
       '등록 목록': '종합 배급 대장 목록',
       '전체': '전체 동향',
+      '오늘 이후 내역 보존': '금일 이후 전투 보급 보존',
+      '어제까지의 과거 내역을 모두 지우고, 오늘 이후의 내역만 남겨둡니다.': '어제까지의 소모 보고를 전체 숙청하고, 금일 이후에 기입된 전투 계획만을 보존합네다.',
     };
     return dict[str] || str;
   };
@@ -1395,23 +1445,55 @@ export default function App() {
   };
 
   const handleReset = () => {
-    // 1. 기초 자산 유지 (Keep Initial Balance)
-    if (!keepInitialBalance) {
-      setInitialBalance(0);
-    }
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
 
-    // 2. 미래 고정 지출 규칙 유지 (Keep Future Recurring Rules)
-    if (!keepFutureRecurringRules) {
-      setRecurringTransactions([]);
-      setRecurringExceptions([]);
-    }
+    if (keepTodayAndFutureRecords) {
+      // 1. 기초 자산 보존 (Do not clear initial balance)
 
-    // 3. 과거 고정 지출 내역 유지 (Keep Past Recurring Records)
-    if (!keepPastRecurringRecords) {
-      setTransactions([]);
+      // 2. 반복 규칙 중 오늘 이후 내용 보존 & 과거 내용 삭제
+      setRecurringTransactions(prev => prev.map(r => {
+        const nextOccurrence = getFirstOccurrenceOnOrAfter(r, today);
+        return {
+          ...r,
+          startDate: format(nextOccurrence, 'yyyy-MM-dd')
+        };
+      }));
+
+      // Filter exceptions to only keep those scheduled today or in the future
+      setRecurringExceptions(prev => prev.filter(e => e.date >= todayStr));
+
+      // 3. 과거 개별 추가한 내역 삭제 + 오늘 이후 내역만 보존
+      let nextTransactions = [...transactions];
+      nextTransactions = nextTransactions.filter(t => {
+        try {
+          const localDateStr = format(parseISO(t.date), 'yyyy-MM-dd');
+          return localDateStr >= todayStr;
+        } catch (e) {
+          return t.date.slice(0, 10) >= todayStr;
+        }
+      });
+      setTransactions(nextTransactions);
+
     } else {
-      // Preserve transactions where isRecurring is true, delete false or undefined
-      setTransactions(prev => prev.filter(t => t.isRecurring === true));
+      // Standard reset path based on other sub-options
+      if (!keepInitialBalance) {
+        setInitialBalance(0);
+      }
+
+      if (!keepFutureRecurringRules) {
+        setRecurringTransactions([]);
+        setRecurringExceptions([]);
+      }
+
+      let nextTransactions = [...transactions];
+      if (!keepPastRecurringRecords) {
+        nextTransactions = [];
+      } else {
+        // Preserve transactions where isRecurring is true, delete false or undefined
+        nextTransactions = nextTransactions.filter(t => t.isRecurring === true);
+      }
+      setTransactions(nextTransactions);
     }
 
     const now = new Date();
@@ -2677,6 +2759,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     setKeepInitialBalance(false);
                     setKeepFutureRecurringRules(false);
                     setKeepPastRecurringRecords(false);
+                    setKeepTodayAndFutureRecords(false);
                     setIsResetOptionsExpanded(false);
                     setIsResetModalOpen(true);
                   }}
@@ -3153,6 +3236,24 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                       >
                         <span
                           className={`absolute top-0.5 left-0.5 bg-m3-surface w-5 h-5 rounded-full border border-m3-surface-container-high shadow-xs transition-transform duration-200 ${keepPastRecurringRecords ? 'translate-x-5' : 'translate-x-0'}`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="h-px bg-gray-100" />
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-xs font-bold text-gray-800">{t('오늘 이후 내역 보존')}</span>
+                        <span className="text-[10px] text-gray-400 leading-normal break-keep">{t('어제까지의 과거 내역을 모두 지우고, 오늘 이후의 내역만 남겨둡니다.')}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setKeepTodayAndFutureRecords(!keepTodayAndFutureRecords)}
+                        className={`w-11 h-6 rounded-full transition-colors relative duration-200 shrink-0 focus:outline-none ${keepTodayAndFutureRecords ? 'bg-green-600' : 'bg-gray-200'}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 bg-m3-surface w-5 h-5 rounded-full border border-m3-surface-container-high shadow-xs transition-transform duration-200 ${keepTodayAndFutureRecords ? 'translate-x-5' : 'translate-x-0'}`}
                         />
                       </button>
                     </div>
