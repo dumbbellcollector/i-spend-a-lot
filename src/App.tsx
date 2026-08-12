@@ -1225,6 +1225,8 @@ export default function App() {
       '고정 지출 (월)': '정기 생활 소모 (월)',
       '순 고정 자금 (월)': '기대 순 배급량 (월)',
       '고정 내역 추가': '정기 배급계획 등록',
+      '고정 내역 수정중': '정기 배급계획 개정중',
+      '고정 규칙 수정 완료': '배급계획 개정 완료',
       '시뮬레이터 반영': '전투 상황판 반영',
       '추천 고정 항목 (원클릭 입력)': '추천 고정 항목 (원클릭 입력)',
       '내용 (메모)': '생활 명목 (메모)',
@@ -1242,8 +1244,10 @@ export default function App() {
       '고정 규칙 생성하기': '배급 계획 결속하기',
       '등록 목록': '종합 배급 대장 목록',
       '전체': '전체 동향',
-      '오늘 이후 내역 보존': '금일 이후 전투 보급 보존',
-      '어제까지의 과거 내역을 모두 지우고, 오늘 이후의 내역만 남겨둡니다.': '어제까지의 소모 보고를 전체 숙청하고, 금일 이후에 기입된 전투 계획만을 보존합네다.',
+      '오늘 이후 내역 보존': '내일 이후 전투 보급 보존',
+      '내일 이후 내역 보존': '내일 이후 전투 보급 보존',
+      '어제까지의 과거 내역을 모두 지우고, 오늘 이후의 내역만 남겨둡니다.': '금일 및 그 이전 소모 보고를 전체 숙청하고, 내일 이후 기입된 전투 계획만을 보존합네다.',
+      '오늘 포함 과거 내역을 모두 지우고, 내일 이후의 내역만 남겨둡니다.': '금일 및 그 이전 소모 보고를 전체 숙청하고, 내일 이후 기입된 전투 계획만을 보존합네다.',
     };
     return dict[str] || str;
   };
@@ -1289,6 +1293,7 @@ export default function App() {
   const [formDate, setFormDate] = useState<Date>(new Date());
 
   // Recurring creation form state
+  const [editingRecRuleId, setEditingRecRuleId] = useState<string | null>(null);
   const [recType, setRecType] = useState<TransactionType>('expense');
   const [recAmount, setRecAmount] = useState<string>('');
   const [recMemo, setRecMemo] = useState<string>('');
@@ -1446,31 +1451,32 @@ export default function App() {
 
   const handleReset = () => {
     const today = new Date();
-    const todayStr = format(today, 'yyyy-MM-dd');
+    const tomorrow = addDays(today, 1);
+    const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
 
     if (keepTodayAndFutureRecords) {
       // 1. 기초 자산 보존 (Do not clear initial balance)
 
-      // 2. 반복 규칙 중 오늘 이후 내용 보존 & 과거 내용 삭제
+      // 2. 반복 규칙 중 내일 이후 내용 보존 & 오늘 포함 과거 내용 삭제
       setRecurringTransactions(prev => prev.map(r => {
-        const nextOccurrence = getFirstOccurrenceOnOrAfter(r, today);
+        const nextOccurrence = getFirstOccurrenceOnOrAfter(r, tomorrow);
         return {
           ...r,
           startDate: format(nextOccurrence, 'yyyy-MM-dd')
         };
       }));
 
-      // Filter exceptions to only keep those scheduled today or in the future
-      setRecurringExceptions(prev => prev.filter(e => e.date >= todayStr));
+      // Filter exceptions to only keep those scheduled tomorrow or in the future
+      setRecurringExceptions(prev => prev.filter(e => e.date >= tomorrowStr));
 
-      // 3. 과거 개별 추가한 내역 삭제 + 오늘 이후 내역만 보존
+      // 3. 오늘 포함 과거 개별 내역 삭제 + 내일 이후 내역만 보존
       let nextTransactions = [...transactions];
       nextTransactions = nextTransactions.filter(t => {
         try {
           const localDateStr = format(parseISO(t.date), 'yyyy-MM-dd');
-          return localDateStr >= todayStr;
+          return localDateStr >= tomorrowStr;
         } catch (e) {
-          return t.date.slice(0, 10) >= todayStr;
+          return t.date.slice(0, 10) >= tomorrowStr;
         }
       });
       setTransactions(nextTransactions);
@@ -1778,6 +1784,27 @@ export default function App() {
     }
   };
 
+  const startEditRecurringRule = (rule: RecurringTransaction) => {
+    setEditingRecRuleId(rule.id);
+    setRecType(rule.type);
+    setRecAmount(rule.amount.toLocaleString('ko-KR'));
+    setRecMemo(rule.memo);
+    setRecStartDate(rule.startDate);
+    setRecEndDate(rule.endDate || '');
+    setRecFrequency(rule.frequency);
+    setRecCustomInterval(rule.customInterval || 3);
+  };
+
+  const cancelEditRecurringRule = () => {
+    setEditingRecRuleId(null);
+    setRecAmount('');
+    setRecMemo('');
+    setRecStartDate(format(new Date(), 'yyyy-MM-dd'));
+    setRecEndDate('');
+    setRecFrequency('monthly');
+    setRecCustomInterval(3);
+  };
+
   const addRecurringRule = () => {
     const rawAmount = Number(recAmount.replace(/,/g, ''));
     if (!rawAmount || isNaN(rawAmount)) {
@@ -1789,18 +1816,38 @@ export default function App() {
       return;
     }
 
-    const newRule: RecurringTransaction = {
-      id: 'rec-' + Math.random().toString(36).substr(2, 9),
-      type: recType,
-      amount: rawAmount,
-      memo: recMemo || (recType === 'income' ? '고정 수입' : '고정 지출'),
-      startDate: recStartDate,
-      endDate: recEndDate || undefined,
-      frequency: recFrequency,
-      customInterval: recFrequency === 'custom' ? recCustomInterval : undefined
-    };
+    if (editingRecRuleId) {
+      // Update existing recurring rule
+      setRecurringTransactions(prev => prev.map(r => 
+        r.id === editingRecRuleId
+          ? {
+              ...r,
+              type: recType,
+              amount: rawAmount,
+              memo: recMemo || (recType === 'income' ? '고정 수입' : '고정 지출'),
+              startDate: recStartDate,
+              endDate: recEndDate || undefined,
+              frequency: recFrequency,
+              customInterval: recFrequency === 'custom' ? recCustomInterval : undefined
+            }
+          : r
+      ));
+      setEditingRecRuleId(null);
+    } else {
+      // Create new recurring rule
+      const newRule: RecurringTransaction = {
+        id: 'rec-' + Math.random().toString(36).substr(2, 9),
+        type: recType,
+        amount: rawAmount,
+        memo: recMemo || (recType === 'income' ? '고정 수입' : '고정 지출'),
+        startDate: recStartDate,
+        endDate: recEndDate || undefined,
+        frequency: recFrequency,
+        customInterval: recFrequency === 'custom' ? recCustomInterval : undefined
+      };
 
-    setRecurringTransactions(prev => [...prev, newRule]);
+      setRecurringTransactions(prev => [...prev, newRule]);
+    }
 
     setRecAmount('');
     setRecMemo('');
@@ -1809,13 +1856,16 @@ export default function App() {
     setRecFrequency('monthly');
     setRecCustomInterval(3);
 
-    const result = archivePastRecurringInstances([...recurringTransactions, newRule], recurringExceptions, transactions);
+    const result = archivePastRecurringInstances(recurringTransactions, recurringExceptions, transactions);
     if (result.updatedTxs.length !== transactions.length) {
       setTransactions(result.updatedTxs);
     }
   };
 
   const deleteRecurringRule = (id: string) => {
+    if (editingRecRuleId === id) {
+      cancelEditRecurringRule();
+    }
     setRecurringTransactions(prev => prev.filter(r => r.id !== id));
     setRecurringExceptions(prev => prev.filter(e => e.recurringId !== id));
   };
@@ -2023,18 +2073,18 @@ export default function App() {
                 {isInMonth && stats && (
                   <div className="flex flex-col items-end justify-end flex-grow w-full overflow-hidden">
                     {stats.income > 0 && (
-                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-m3-primary mb-[0.5px] font-mono tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
+                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-semibold text-m3-primary mb-[0.5px] tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
                         <span className="inline sm:hidden">+{formatCalendarCompact(stats.income)}</span>
                         <span className="hidden sm:inline">+{formatCurrency(stats.income)}</span>
                       </span>
                     )}
                     {stats.expense > 0 && (
-                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-black text-rose-600 mb-[0.5px] font-mono tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
+                      <span className="text-[8px] sm:text-[9.5px] md:text-[10px] font-semibold text-rose-600 dark:text-rose-400 mb-[0.5px] tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block">
                         <span className="inline sm:hidden">-{formatCalendarCompact(stats.expense)}</span>
                         <span className="hidden sm:inline">-{formatCurrency(stats.expense)}</span>
                       </span>
                     )}
-                    <span className={`text-[8.5px] sm:text-[10px] md:text-[11px] font-black mt-0.5 font-mono tabular-nums tracking-tighter sm:tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block ${stats.balance < 0 ? 'text-rose-600' : 'text-slate-950'} ${isToday ? 'bg-m3-secondary-container/50 px-0.5 rounded-sm' : ''}`}>
+                    <span className={`text-[8.5px] sm:text-[10px] md:text-[11px] font-bold mt-0.5 tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-right block ${stats.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'} ${isToday ? 'bg-m3-secondary-container/50 px-0.5 rounded-sm' : ''}`}>
                       <span className="inline sm:hidden">{formatCalendarCompact(stats.balance)}</span>
                       <span className="hidden sm:inline">{formatCurrency(stats.balance)}</span>
                     </span>
@@ -2357,7 +2407,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         inputMode="numeric"
                         value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
                         onChange={handleInitialBalanceChange}
-                        className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-m3-surface rounded-3xl px-4 py-3 text-lg font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-m3-primary/15 transition-all font-mono tabular-nums"
+                        className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-m3-surface rounded-3xl px-4 py-3 text-lg font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-m3-primary/15 transition-all tabular-nums tracking-tight"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-extrabold text-xs">{isComradeMode ? '억 원' : '₩'}</span>
                     </div>
@@ -2366,14 +2416,14 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                   <section className="bg-slate-50/50 border border-slate-200/60 rounded-3xl p-4 space-y-4 shadow-3xs">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-bold">{t('총 수입 (예정)')}</span>
-                      <span className="font-extrabold text-emerald-600 font-mono tabular-nums">
-                        +<span className="font-mono tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        +<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'income').reduce((s,tx) => s+tx.amount, 0))}</span>
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-bold">{t('총 지출 (예정)')}</span>
-                      <span className="font-extrabold text-rose-600 font-mono tabular-nums">
-                        -<span className="font-mono tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}</span>
+                      <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+                        -<span className="tabular-nums tracking-tight">{formatCurrency(transactions.filter(t => t.isActive && t.type === 'expense').reduce((s,tx) => s+tx.amount, 0))}</span>
                       </span>
                     </div>
                     <div className="h-px bg-slate-200/60 my-1"></div>
@@ -2382,13 +2432,13 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         {t('기말 잔액')}
                         <button 
                           onClick={() => setIsHelpModalOpen(true)}
-                          className="text-slate-400 font-mono tabular-nums tracking-tight hover:text-m3-primary transition-colors p-0.5"
+                          className="text-slate-400 tabular-nums tracking-tight hover:text-m3-primary transition-colors p-0.5"
                         >
                           <HelpCircle className="w-3.5 h-3.5" />
                         </button>
                       </span>
-                      <span className="text-lg font-black text-slate-900 tracking-tight leading-none font-mono tabular-nums">
-                        <span className="font-mono tabular-nums tracking-tight">{formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}</span>
+                      <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none tabular-nums">
+                        <span className="tabular-nums tracking-tight">{formatCurrency(simulationData[format(endOfMonth(months[months.length - 1]), 'yyyy-MM-dd')]?.balance ?? initialBalance)}</span>
                       </span>
                     </div>
                   </section>
@@ -2411,7 +2461,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                                   {tx.id.startsWith('dynamic-') && <span className="text-m3-primary font-bold shrink-0 text-[10px]" title="고정 지출/수입 항목">🔁</span>}
                                   {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                                 </span>
-                                <span className={`text-[11px] font-black mt-0.5 font-mono tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-600'}`}>
+                                <span className={`text-[11px] font-bold mt-0.5 tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-rose-600 dark:text-rose-400'}`}>
                                   {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                                 </span>
                               </div>
@@ -2466,14 +2516,14 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-700/50">
                       <div className="space-y-0.5">
                         <span className="text-[9.5px] font-bold text-slate-400 block">{t('고정 수입 (월)')}</span>
-                        <div className="flex items-center gap-1 text-emerald-400 font-black text-sm font-mono tabular-nums">
+                        <div className="flex items-center gap-1 text-emerald-400 font-bold text-sm tabular-nums tracking-tight">
                           <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
                           <span>+{formatCurrency(recurringOverview.income)}</span>
                         </div>
                       </div>
                       <div className="space-y-0.5">
                         <span className="text-[9.5px] font-bold text-slate-400 block">{t('고정 지출 (월)')}</span>
-                        <div className="flex items-center gap-1 text-rose-400 font-black text-sm font-mono tabular-nums">
+                        <div className="flex items-center gap-1 text-rose-400 font-bold text-sm tabular-nums tracking-tight">
                           <ArrowDownCircle className="w-3.5 h-3.5 shrink-0" />
                           <span>-{formatCurrency(recurringOverview.expense)}</span>
                         </div>
@@ -2482,21 +2532,33 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
 
                     <div className="bg-white/5 rounded-2xl p-3 flex justify-between items-center">
                       <span className="text-xs font-bold text-slate-200">{t('순 고정 자금 (월)')}</span>
-                      <span className={`text-sm font-black font-mono tabular-nums ${recurringOverview.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <span className={`text-sm font-bold tabular-nums tracking-tight ${recurringOverview.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {recurringOverview.net >= 0 ? '+' : ''}{formatCurrency(recurringOverview.net)}
                       </span>
                     </div>
                   </div>
 
-                  {/* 고정 지출/수입 등록 양식 */}
-                  <section className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 space-y-4 shadow-3xs">
+                  {/* 고정 지출/수입 등록 및 수정 양식 */}
+                  <section className={`border rounded-3xl p-4 space-y-4 shadow-3xs transition-all ${
+                    editingRecRuleId ? 'bg-m3-secondary-container/20 border-m3-primary/40 ring-1 ring-m3-primary/20' : 'bg-slate-50/70 border-slate-200'
+                  }`}>
                     <div className="flex justify-between items-center">
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> {t('고정 내역 추가')}
+                        <Repeat className="w-3.5 h-3.5 text-m3-primary" /> {editingRecRuleId ? t('고정 내역 수정중') : t('고정 내역 추가')}
                       </h3>
-                      <span className="text-[10px] text-m3-primary font-bold bg-m3-primary-container/40 px-2 py-0.5 rounded-full">
-                        {t('시뮬레이터 반영')}
-                      </span>
+                      {editingRecRuleId ? (
+                        <button
+                          type="button"
+                          onClick={cancelEditRecurringRule}
+                          className="text-[10px] font-black text-rose-500 hover:text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 cursor-pointer"
+                        >
+                          {t('취소')}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-m3-primary font-bold bg-m3-primary-container/40 px-2 py-0.5 rounded-full">
+                          {t('시뮬레이터 반영')}
+                        </span>
+                      )}
                     </div>
                     
                     {/* 수입 / 지출 탭 토글 */}
@@ -2651,13 +2713,24 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={addRecurringRule}
-                      className="w-full py-2.5 bg-m3-primary text-white rounded-full text-xs font-extrabold hover:bg-m3-primary/90 transition-colors active:scale-95 shadow-3xs"
-                    >
-                      {t('고정 규칙 생성하기')}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={addRecurringRule}
+                        className="flex-1 py-2.5 bg-m3-primary text-white rounded-full text-xs font-extrabold hover:bg-m3-primary/90 transition-colors active:scale-95 shadow-3xs cursor-pointer"
+                      >
+                        {editingRecRuleId ? t('고정 규칙 수정 완료') : t('고정 규칙 생성하기')}
+                      </button>
+                      {editingRecRuleId && (
+                        <button
+                          type="button"
+                          onClick={cancelEditRecurringRule}
+                          className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          {t('취소')}
+                        </button>
+                      )}
+                    </div>
                   </section>
 
                   {/* 활성 고정 규칙 관리 목록 & 세그먼트 필터 */}
@@ -2692,10 +2765,14 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                         .filter(rule => recFilter === 'all' || rule.type === recFilter)
                         .map(rule => {
                           const isInc = rule.type === 'income';
+                          const isEditingThis = editingRecRuleId === rule.id;
                           return (
                             <div 
                               key={rule.id} 
-                              className={`p-3.5 bg-m3-surface border rounded-3xl flex items-center justify-between hover:shadow-2xs transition-all ${
+                              onClick={() => startEditRecurringRule(rule)}
+                              className={`p-3.5 bg-m3-surface border rounded-3xl flex items-center justify-between hover:shadow-2xs transition-all cursor-pointer ${
+                                isEditingThis ? 'ring-2 ring-m3-primary border-m3-primary shadow-xs' : ''
+                              } ${
                                 isInc 
                                   ? 'border-emerald-100 bg-gradient-to-br from-m3-surface to-emerald-50/10' 
                                   : 'border-rose-100 bg-gradient-to-br from-m3-surface to-rose-50/10'
@@ -2723,19 +2800,36 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                                     <span>기간: {rule.startDate} {rule.endDate ? `~ ${rule.endDate}` : '(무기한)'}</span>
                                   </span>
                                 </div>
-                                <div className={`text-[12px] font-black mt-2 tracking-tight font-mono tabular-nums ${isInc ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  <span className="font-mono tabular-nums tracking-tight">
+                                <div className={`text-[12px] font-bold mt-2 tracking-tight tabular-nums ${isInc ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                  <span className="tabular-nums tracking-tight">
                                     {isInc ? '+' : '-'}{formatCurrency(rule.amount)}
                                   </span>
                                 </div>
                               </div>
-                              <button
-                                onClick={() => deleteRecurringRule(rule.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors shrink-0 cursor-pointer"
-                                title="규칙 삭제"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEditRecurringRule(rule);
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-m3-primary hover:bg-m3-secondary-container rounded-full transition-colors shrink-0 cursor-pointer"
+                                  title="규칙 수정"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteRecurringRule(rule.id);
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors shrink-0 cursor-pointer"
+                                  title="규칙 삭제"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -2889,12 +2983,12 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                   const total = income - expense;
                   return (
                     <div className="text-[13px] font-medium text-gray-600 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-m3-primary font-mono tabular-nums tracking-tight">+<span className="font-mono tabular-nums tracking-tight">{formatCurrency(income)}</span></span>
-                      <span className="text-gray-400 font-mono tabular-nums tracking-tight">-</span>
-                      <span className="text-m3-error font-mono tabular-nums tracking-tight"><span className="font-mono tabular-nums tracking-tight">{formatCurrency(expense)}</span></span>
-                      <span className="text-gray-400 font-mono tabular-nums tracking-tight">=</span>
-                      <span className={`font-bold font-mono ${total >= 0 ? 'text-m3-primary' : 'text-m3-error'}`}>
-                        {total > 0 ? '+' : ''}<span className="font-mono tabular-nums tracking-tight">{formatCurrency(total)}</span>
+                      <span className="text-m3-primary tabular-nums tracking-tight font-bold">+<span className="tabular-nums tracking-tight">{formatCurrency(income)}</span></span>
+                      <span className="text-gray-400 tabular-nums tracking-tight">-</span>
+                      <span className="text-m3-error tabular-nums tracking-tight font-bold"><span className="tabular-nums tracking-tight">{formatCurrency(expense)}</span></span>
+                      <span className="text-gray-400 tabular-nums tracking-tight">=</span>
+                      <span className={`font-bold ${total >= 0 ? 'text-m3-primary' : 'text-m3-error'}`}>
+                        {total > 0 ? '+' : ''}<span className="tabular-nums tracking-tight">{formatCurrency(total)}</span>
                       </span>
                     </div>
                   );
@@ -2925,7 +3019,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                           {tx.id.startsWith('dynamic-') && <span className="text-blue-500 font-bold shrink-0 text-[11px]" title="고정 지출/수입 항목">🔁</span>}
                           {tx.memo || (tx.type === 'income' ? t('수입') : t('지출'))}
                         </span>
-                        <span className={`text-[12px] mt-0.5 font-bold font-mono tabular-nums ${tx.type === 'income' ? 'text-m3-primary' : 'text-m3-error'}`}>
+                        <span className={`text-[12px] mt-0.5 font-bold tabular-nums tracking-tight ${tx.type === 'income' ? 'text-m3-primary' : 'text-m3-error'}`}>
                           {(tx.type === 'income' ? '+' : '-') + formatCurrency(tx.amount)}
                         </span>
                       </div>
@@ -3244,8 +3338,8 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
 
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="text-xs font-bold text-gray-800">{t('오늘 이후 내역 보존')}</span>
-                        <span className="text-[10px] text-gray-400 leading-normal break-keep">{t('어제까지의 과거 내역을 모두 지우고, 오늘 이후의 내역만 남겨둡니다.')}</span>
+                        <span className="text-xs font-bold text-gray-800">{t('내일 이후 내역 보존')}</span>
+                        <span className="text-[10px] text-gray-400 leading-normal break-keep">{t('오늘 포함 과거 내역을 모두 지우고, 내일 이후의 내역만 남겨둡니다.')}</span>
                       </div>
                       <button
                         type="button"
@@ -3324,8 +3418,8 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                           : format(deathValleyInfo.date, 'yyyy년 M월 d일', { locale: ko })
                         }
                       </span>
-                      <span className={`text-[15px] font-mono tabular-nums ${deathValleyInfo.balance < 0 ? 'text-m3-error' : 'text-[#1d192b]'}`}>
-                        <span className="font-mono tabular-nums tracking-tight">{formatCurrency(deathValleyInfo.balance)}</span>
+                      <span className={`text-[15px] font-bold tabular-nums tracking-tight ${deathValleyInfo.balance < 0 ? 'text-m3-error' : 'text-slate-900 dark:text-slate-100'}`}>
+                        <span className="tabular-nums tracking-tight">{formatCurrency(deathValleyInfo.balance)}</span>
                       </span>
                     </p>
                   </div>
@@ -3354,8 +3448,8 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                               return (
                                 <div className="bg-m3-surface border border-m3-surface-container-high shadow-xs border border-m3-outline-variant p-2 rounded-xl text-xs">
                                   <p className="text-gray-500 mb-1">{payload[0].payload.date}</p>
-                                  <p className={`font-bold font-mono ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-m3-error' : 'text-m3-primary'}`}>
-                                    <span className="font-mono tabular-nums tracking-tight">{formatCurrency(Number(payload[0].value))}</span>
+                                  <p className={`font-bold ${payload[0].value !== undefined && Number(payload[0].value) < 0 ? 'text-m3-error' : 'text-m3-primary'}`}>
+                                    <span className="tabular-nums tracking-tight">{formatCurrency(Number(payload[0].value))}</span>
                                   </p>
                                 </div>
                               );
