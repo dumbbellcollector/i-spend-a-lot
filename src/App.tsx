@@ -45,7 +45,10 @@ import {
   LogIn,
   LogOut,
   Copy,
-  Check
+  Check,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import LZString from 'lz-string';
@@ -638,21 +641,62 @@ const getFirstOccurrenceOnOrAfter = (rule: RecurringTransaction, minDate: Date):
 // --- Components ---
 
 export default function App() {
+  const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cashFlow_themeMode');
+      if (saved === 'light' || saved === 'dark' || saved === 'system') {
+        return saved;
+      }
+    }
+    return 'system';
+  });
+
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cashFlow_themeMode') || 'system';
+      if (saved === 'dark') return true;
+      if (saved === 'light') return false;
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     return false;
   });
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const listener = (e: MediaQueryListEvent) => {
-      setIsDarkMode(e.matches);
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('cashFlow_themeMode', themeMode);
+
+    const applyTheme = () => {
+      let effectiveDark = false;
+      if (themeMode === 'dark') {
+        effectiveDark = true;
+      } else if (themeMode === 'light') {
+        effectiveDark = false;
+      } else {
+        effectiveDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+
+      setIsDarkMode(effectiveDark);
+      const root = document.documentElement;
+      if (effectiveDark) {
+        root.classList.add('dark');
+        root.classList.remove('light');
+      } else {
+        root.classList.add('light');
+        root.classList.remove('dark');
+      }
     };
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
-  }, []);
+
+    applyTheme();
+
+    if (themeMode === 'system') {
+      const media = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = (e: MediaQueryListEvent) => {
+        applyTheme();
+      };
+      media.addEventListener('change', listener);
+      return () => media.removeEventListener('change', listener);
+    }
+  }, [themeMode]);
 
   const [initialBalance, setInitialBalance] = useState<number>(() => {
     const saved = localStorage.getItem('cashFlow_initialBalance');
@@ -674,7 +718,7 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<'settings' | 'calendar' | 'recurring'>('calendar');
-  const [sidebarTab, setSidebarTab] = useState<'detail' | 'recurring'>('detail');
+  const [sidebarTab, setSidebarTab] = useState<'detail' | 'recurring' | 'settings'>('detail');
 
   // --- Supabase Cloud Sync & Authentication States ---
   const [supabaseUser, setSupabaseUser] = useState<any>(null);
@@ -1142,7 +1186,7 @@ export default function App() {
   // Sync activeTab with sidebarTab for mobile vs desktop switching
   useEffect(() => {
     if (activeTab === 'settings') {
-      setSidebarTab('detail');
+      setSidebarTab('settings');
     } else if (activeTab === 'recurring') {
       setSidebarTab('recurring');
     }
@@ -1167,6 +1211,7 @@ export default function App() {
   const [titleTapCount, setTitleTapCount] = useState(0);
   const [showEasterEgg, setShowEasterEgg] = useState(false);
   const [isComradeMode, setIsComradeMode] = useState(false);
+  const [lang, setLang] = useState<'ko' | 'en'>('ko');
 
   const amountInputRef = useRef<HTMLInputElement>(null);
 
@@ -2206,198 +2251,30 @@ export default function App() {
 
           <div className="space-y-6 flex-grow overflow-y-auto pr-1 no-scrollbar flex flex-col justify-between">
             <div>
-              {/* Segmented Control with Capsule design */}
-              <div className="hidden lg:grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-full mb-6 text-xs font-bold select-none border border-slate-200/30">
+              {/* Segmented Control with Capsule design - 3 Tabs for PC */}
+              <div className="hidden lg:grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl mb-6 text-xs font-bold select-none border border-slate-200/60 dark:border-slate-700/60">
                 <button 
-                  onClick={() => { setSidebarTab('detail'); setActiveTab('settings'); }}
-                  className={`py-1.5 rounded-full transition-all text-center cursor-pointer ${sidebarTab === 'detail' ? 'bg-m3-surface shadow-xs text-slate-800 border border-slate-200/30 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
+                  onClick={() => { setSidebarTab('detail'); setActiveTab('calendar'); }}
+                  className={`py-2 px-1 rounded-xl transition-all text-center cursor-pointer text-[11px] ${sidebarTab === 'detail' ? 'bg-m3-surface shadow-xs text-m3-primary font-black border border-slate-200/50 dark:border-slate-700' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
                 >
-                  기본 설정 및 내역
+                  기본 내역
                 </button>
                 <button 
                   onClick={() => { setSidebarTab('recurring'); setActiveTab('recurring'); }}
-                  className={`py-1.5 rounded-full transition-all text-center cursor-pointer ${sidebarTab === 'recurring' ? 'bg-m3-surface shadow-xs text-slate-800 border border-slate-200/30 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`py-2 px-1 rounded-xl transition-all text-center cursor-pointer text-[11px] ${sidebarTab === 'recurring' ? 'bg-m3-surface shadow-xs text-m3-primary font-black border border-slate-200/50 dark:border-slate-700' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
                 >
-                  고정 지출 관리
+                  고정 지출
+                </button>
+                <button 
+                  onClick={() => { setSidebarTab('settings'); setActiveTab('settings'); }}
+                  className={`py-2 px-1 rounded-xl transition-all text-center cursor-pointer text-[11px] ${sidebarTab === 'settings' ? 'bg-m3-surface shadow-xs text-m3-primary font-black border border-slate-200/50 dark:border-slate-700' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                >
+                  설정
                 </button>
               </div>
 
               {sidebarTab === 'detail' ? (
                 <div className="space-y-5">
-                  <section className="bg-slate-50/70 border border-slate-200/60 rounded-3xl p-4 space-y-3 shadow-3xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                        클라우드 동기화
-                      </span>
-                      {supabaseUser && (
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${isCloudSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`} />
-                          <span className="text-[9.5px] font-bold text-slate-400">
-                            {isCloudSyncing ? '동기화 중...' : '동기화됨'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {!supabaseUser ? (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={handleGoogleLogin}
-                          disabled={!getSupabase()}
-                          className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-2xl font-black text-xs transition-all active:scale-95 border border-slate-200 shadow-3xs flex items-center justify-center gap-2 cursor-pointer duration-200"
-                        >
-                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                            <path
-                              fill="#4285F4"
-                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                            />
-                            <path
-                              fill="#34A853"
-                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                            />
-                            <path
-                              fill="#FBBC05"
-                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                            />
-                            <path
-                              fill="#EA4335"
-                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                            />
-                          </svg>
-                          <span>Google 로그인</span>
-                        </button>
-                        {!getSupabase() && (
-                          <p className="text-[9.5px] text-amber-600 font-bold leading-normal text-center break-keep">
-                            ⚠️ Supabase 환경 변수가 아직 설정되지 않았습니다. AI Studio의 Settings에서 Secrets을 설정해 주세요.
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="bg-white/85 border border-slate-100 p-3 rounded-2xl flex items-center justify-between">
-                          <div className="flex flex-col min-w-0 select-none">
-                            <span className="text-[10px] font-extrabold text-slate-400">연결된 계정</span>
-                            <span className="text-[11.5px] font-black text-slate-800 truncate select-all">{supabaseUser.email}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleSignOut}
-                            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-xl transition-colors duration-200 cursor-pointer flex items-center justify-center shrink-0"
-                            title="로그아웃"
-                          >
-                            <LogOut className="w-4 h-4" />
-                          </button>
-                        </div>
-                        {cloudSyncError && (
-                          <div className="space-y-3">
-                            <div className="p-3.5 bg-red-50/80 border border-red-100/70 text-rose-600 rounded-2xl">
-                              <p className="text-[10px] font-bold leading-normal whitespace-pre-wrap break-keep">
-                                {cloudSyncError}
-                              </p>
-                            </div>
-                            
-                            {/* Expandable SQL Guide Card */}
-                            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-3xs transition-all">
-                              <button
-                                type="button"
-                                onClick={() => setIsSqlHelpOpen(!isSqlHelpOpen)}
-                                className="w-full flex items-center justify-between text-left text-xs font-black text-slate-700 hover:text-slate-900 cursor-pointer select-none"
-                              >
-                                <span className="flex items-center gap-1.5">🛠️ Supabase 테이블 및 RLS 설정 가이드</span>
-                                {isSqlHelpOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
-                              </button>
-                              
-                              {isSqlHelpOpen && (
-                                <div className="space-y-3 text-[10.5px] text-slate-600 leading-normal border-t border-slate-200/50 pt-2.5 animate-fade-in">
-                                  <p className="font-extrabold text-slate-700">간단한 2단계 지침으로 동기화 문제를 즉시 해결할 수 있습니다:</p>
-                                  
-                                  <div className="space-y-1 bg-white p-2.5 border border-slate-100 rounded-xl shadow-4xs">
-                                    <p className="font-black text-slate-700">1단계. Supabase SQL Editor 열기</p>
-                                    <p className="font-medium text-slate-500 text-[10px]">
-                                      본인의 Supabase 프로젝트 대시보드의 왼쪽 메뉴에서 <strong className="text-slate-800">SQL Editor</strong>를 클릭하고, 상단의 <strong className="text-slate-800">New Query</strong>를 눌러 새로운 SQL 쿼리 생성창을 엽니다.
-                                    </p>
-                                  </div>
-
-                                  <div className="space-y-2.5 bg-white p-2.5 border border-slate-100 rounded-xl shadow-4xs">
-                                    <div className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200/30">
-                                      <p className="font-black text-slate-700">2단계. 아래 쿼리 복사 & 실행</p>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const sqlCode = `CREATE TABLE IF NOT EXISTS public.user_sync (
-    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    initial_balance_enc TEXT,
-    transactions_enc TEXT,
-    recurring_transactions_enc TEXT,
-    recurring_exceptions_enc TEXT,
-    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE public.user_sync ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow select for owner" ON public.user_sync;
-DROP POLICY IF EXISTS "Allow insert/update for owner" ON public.user_sync;
-DROP POLICY IF EXISTS "Allow all for owner" ON public.user_sync;
-
-CREATE POLICY "Allow all for owner" ON public.user_sync
-    FOR ALL
-    TO authenticated
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);`;
-                                          navigator.clipboard.writeText(sqlCode);
-                                          setCopiedSql(true);
-                                          setTimeout(() => setCopiedSql(false), 2000);
-                                        }}
-                                        className="flex items-center gap-1 px-2 py-0.5 bg-m3-primary hover:bg-m3-primary/95 text-white rounded-md font-bold text-[9.5px] transition-all cursor-pointer shadow-3xs"
-                                      >
-                                        {copiedSql ? (
-                                          <>
-                                            <Check className="w-2.5 h-2.5" />
-                                            <span>복사완료!</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Copy className="w-2.5 h-2.5" />
-                                            <span>SQL 복사</span>
-                                          </>
-                                        )}
-                                      </button>
-                                    </div>
-                                    
-                                    <pre className="p-2 bg-slate-900 text-slate-200 rounded-lg text-[8.5px] font-mono overflow-x-auto max-h-40 leading-relaxed select-all no-scrollbar">
-{`CREATE TABLE IF NOT EXISTS public.user_sync (
-    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    initial_balance_enc TEXT,
-    transactions_enc TEXT,
-    recurring_transactions_enc TEXT,
-    recurring_exceptions_enc TEXT,
-    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE public.user_sync ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow select for owner" ON public.user_sync;
-DROP POLICY IF EXISTS "Allow insert/update for owner" ON public.user_sync;
-DROP POLICY IF EXISTS "Allow all for owner" ON public.user_sync;
-
-CREATE POLICY "Allow all for owner" ON public.user_sync
-    FOR ALL
-    TO authenticated
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);`}
-                                    </pre>
-                                    <p className="text-slate-500 font-medium text-[10px] break-keep leading-tight">
-                                      위 코드를 복사하여 SQL Editor에 붙여넣은 뒤, 우측 하단의 <strong className="text-slate-800">Run</strong> 버튼을 눌러 성공적으로 실행해 주세요. 실행한 뒤 본 예산 달력 페이지를 새로고침(F5)하여 다시 로그인하시면 완벽히 자동 연동이 시작됩니다!
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </section>
 
                   <section>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('기초 자산 설정')}</label>
@@ -2497,7 +2374,7 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     )}
                   </div>
                 </div>
-              ) : (
+              ) : sidebarTab === 'recurring' ? (
                 <div className="space-y-6">
                   {/* 고정 지출/수입 요약 분석 카드 */}
                   <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
@@ -2842,41 +2719,303 @@ CREATE POLICY "Allow all for owner" ON public.user_sync
                     </div>
                   </section>
                 </div>
+              ) : (
+                /* Settings Tab */
+                <div className="space-y-5">
+                  {/* Theme Mode Selection */}
+                  <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                        {t('테마 설정')}
+                      </span>
+                      <span className="text-[10px] text-m3-primary font-bold">
+                        {themeMode === 'system' ? '시스템 설정' : themeMode === 'dark' ? '다크모드' : '라이트모드'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 bg-slate-200/60 dark:bg-slate-900/60 p-1 rounded-2xl text-xs font-bold select-none border border-slate-200/40 dark:border-slate-700/40">
+                      <button
+                        type="button"
+                        onClick={() => setThemeMode('light')}
+                        className={`py-2 px-1 rounded-xl transition-all text-center cursor-pointer flex flex-col items-center gap-1 ${
+                          themeMode === 'light'
+                            ? 'bg-m3-surface shadow-xs text-m3-primary font-black border border-slate-200/50 dark:border-slate-700'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <Sun className="w-4 h-4 shrink-0 text-amber-500" />
+                        <span className="text-[10px]">라이트</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setThemeMode('dark')}
+                        className={`py-2 px-1 rounded-xl transition-all text-center cursor-pointer flex flex-col items-center gap-1 ${
+                          themeMode === 'dark'
+                            ? 'bg-m3-surface shadow-xs text-m3-primary font-black border border-slate-200/50 dark:border-slate-700'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <Moon className="w-4 h-4 shrink-0 text-indigo-400" />
+                        <span className="text-[10px]">다크</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setThemeMode('system')}
+                        className={`py-2 px-1 rounded-xl transition-all text-center cursor-pointer flex flex-col items-center gap-1 ${
+                          themeMode === 'system'
+                            ? 'bg-m3-surface shadow-xs text-m3-primary font-black border border-slate-200/50 dark:border-slate-700'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <Monitor className="w-4 h-4 shrink-0 text-slate-400" />
+                        <span className="text-[10px]">시스템</span>
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Cloud Sync Section */}
+                  <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                        클라우드 동기화
+                      </span>
+                      {supabaseUser && (
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isCloudSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`} />
+                          <span className="text-[9.5px] font-bold text-slate-400">
+                            {isCloudSyncing ? '동기화 중...' : '동기화됨'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {!supabaseUser ? (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={handleGoogleLogin}
+                          disabled={!getSupabase()}
+                          className="w-full py-3 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100 rounded-2xl font-black text-xs transition-all active:scale-95 border border-slate-200 dark:border-slate-600 shadow-3xs flex items-center justify-center gap-2 cursor-pointer duration-200"
+                        >
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                            <path
+                              fill="#4285F4"
+                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                            />
+                            <path
+                              fill="#34A853"
+                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            />
+                            <path
+                              fill="#FBBC05"
+                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                            />
+                            <path
+                              fill="#EA4335"
+                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                            />
+                          </svg>
+                          <span>Google 로그인</span>
+                        </button>
+                        {!getSupabase() && (
+                          <p className="text-[9.5px] text-amber-600 font-bold leading-normal text-center break-keep">
+                            ⚠️ Supabase 환경 변수가 아직 설정되지 않았습니다. AI Studio의 Settings에서 Secrets을 설정해 주세요.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="bg-white/85 dark:bg-slate-700/80 border border-slate-100 dark:border-slate-600 p-3 rounded-2xl flex items-center justify-between">
+                          <div className="flex flex-col min-w-0 select-none">
+                            <span className="text-[10px] font-extrabold text-slate-400">연결된 계정</span>
+                            <span className="text-[11.5px] font-black text-slate-800 dark:text-slate-100 truncate select-all">{supabaseUser.email}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleSignOut}
+                            className="p-2 bg-slate-100 dark:bg-slate-600 hover:bg-slate-200 dark:hover:bg-slate-500 text-slate-500 dark:text-slate-200 rounded-xl transition-colors duration-200 cursor-pointer flex items-center justify-center shrink-0"
+                            title="로그아웃"
+                          >
+                            <LogOut className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {cloudSyncError && (
+                          <div className="space-y-3">
+                            <div className="p-3.5 bg-red-50/80 dark:bg-red-950/50 border border-red-100/70 dark:border-red-900/70 text-rose-600 dark:text-rose-400 rounded-2xl">
+                              <p className="text-[10px] font-bold leading-normal whitespace-pre-wrap break-keep">
+                                {cloudSyncError}
+                              </p>
+                            </div>
+                            
+                            <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-2xl p-3.5 space-y-2.5 shadow-3xs transition-all">
+                              <button
+                                type="button"
+                                onClick={() => setIsSqlHelpOpen(!isSqlHelpOpen)}
+                                className="w-full flex items-center justify-between text-left text-xs font-black text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white cursor-pointer select-none"
+                              >
+                                <span className="flex items-center gap-1.5">🛠️ Supabase 테이블 및 RLS 설정 가이드</span>
+                                {isSqlHelpOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                              </button>
+                              
+                              {isSqlHelpOpen && (
+                                <div className="space-y-3 text-[10.5px] text-slate-600 dark:text-slate-300 leading-normal border-t border-slate-200/50 dark:border-slate-700/50 pt-2.5 animate-fade-in">
+                                  <p className="font-extrabold text-slate-700 dark:text-slate-200">간단한 2단계 지침으로 동기화 문제를 즉시 해결할 수 있습니다:</p>
+                                  
+                                  <div className="space-y-1 bg-white dark:bg-slate-900 p-2.5 border border-slate-100 dark:border-slate-800 rounded-xl shadow-4xs">
+                                    <p className="font-black text-slate-700 dark:text-slate-200">1단계. Supabase SQL Editor 열기</p>
+                                    <p className="font-medium text-slate-500 dark:text-slate-400 text-[10px]">
+                                      본인의 Supabase 프로젝트 대시보드의 왼쪽 메뉴에서 <strong className="text-slate-800 dark:text-slate-200">SQL Editor</strong>를 클릭하고, 상단의 <strong className="text-slate-800 dark:text-slate-200">New Query</strong>를 눌러 새로운 SQL 쿼리 생성창을 엽니다.
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-2.5 bg-white dark:bg-slate-900 p-2.5 border border-slate-100 dark:border-slate-800 rounded-xl shadow-4xs">
+                                    <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800 px-2 py-1.5 rounded-lg border border-slate-200/30 dark:border-slate-700/30">
+                                      <p className="font-black text-slate-700 dark:text-slate-200">2단계. 아래 쿼리 복사 & 실행</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const sqlCode = `CREATE TABLE IF NOT EXISTS public.user_sync (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    initial_balance_enc TEXT,
+    transactions_enc TEXT,
+    recurring_transactions_enc TEXT,
+    recurring_exceptions_enc TEXT,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.user_sync ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow select for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow insert/update for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow all for owner" ON public.user_sync;
+
+CREATE POLICY "Allow all for owner" ON public.user_sync
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);`;
+                                          navigator.clipboard.writeText(sqlCode);
+                                          setCopiedSql(true);
+                                          setTimeout(() => setCopiedSql(false), 2000);
+                                        }}
+                                        className="flex items-center gap-1 px-2 py-0.5 bg-m3-primary hover:bg-m3-primary/95 text-white rounded-md font-bold text-[9.5px] transition-all cursor-pointer shadow-3xs"
+                                      >
+                                        {copiedSql ? (
+                                          <>
+                                            <Check className="w-2.5 h-2.5" />
+                                            <span>복사완료!</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-2.5 h-2.5" />
+                                            <span>SQL 복사</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                    
+                                    <pre className="p-2 bg-slate-900 text-slate-200 rounded-lg text-[8.5px] font-mono overflow-x-auto max-h-40 leading-relaxed select-all no-scrollbar">
+{`CREATE TABLE IF NOT EXISTS public.user_sync (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    initial_balance_enc TEXT,
+    transactions_enc TEXT,
+    recurring_transactions_enc TEXT,
+    recurring_exceptions_enc TEXT,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.user_sync ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow select for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow insert/update for owner" ON public.user_sync;
+DROP POLICY IF EXISTS "Allow all for owner" ON public.user_sync;
+
+CREATE POLICY "Allow all for owner" ON public.user_sync
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);`}
+                                    </pre>
+                                    <p className="text-slate-500 dark:text-slate-400 font-medium text-[10px] break-keep leading-tight">
+                                      위 코드를 복사하여 SQL Editor에 붙여넣은 뒤, 우측 하단의 <strong className="text-slate-800 dark:text-slate-200">Run</strong> 버튼을 눌러 성공적으로 실행해 주세요.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Backup & Restore */}
+                  <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                      {t('데이터 백업 및 복원')}
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => openDataSyncModal('export')}
+                        className="py-2.5 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-2xl font-black text-[11px] transition-all shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200 dark:border-slate-600"
+                      >
+                        <Upload size={13} /> {t('내보내기')}
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => openDataSyncModal('import')}
+                        className="py-2.5 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-2xl font-black text-[11px] transition-all shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200 dark:border-slate-600"
+                      >
+                        <Download size={13} /> {t('불러오기')}
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Language & Mode */}
+                  <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                      {t('언어 및 표시 설정')}
+                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}
+                        className="flex-1 py-2 px-3 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-600 transition-colors text-center"
+                      >
+                        🌐 {lang === 'ko' ? '한국어 (KR)' : 'English (EN)'}
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setIsComradeMode(!isComradeMode)}
+                        className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 ${isComradeMode ? 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-200 border border-slate-200 dark:border-slate-600'}`}
+                      >
+                        🚩 {isComradeMode ? '인민 달력' : '일반 달력'}
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Reset Data */}
+                  <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest block">
+                      {t('초기화')}
+                    </span>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setKeepInitialBalance(false);
+                        setKeepFutureRecurringRules(false);
+                        setKeepPastRecurringRecords(false);
+                        setKeepTodayAndFutureRecords(false);
+                        setIsResetOptionsExpanded(false);
+                        setIsResetModalOpen(true);
+                      }}
+                      className="w-full py-3 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 rounded-2xl font-black text-xs transition-colors active:scale-95 border border-rose-200 dark:border-rose-900 shadow-3xs cursor-pointer"
+                    >
+                      {t('데이터 초기화')}
+                    </button>
+                  </section>
+                </div>
               )}
             </div>
-
-            {/* Bottom Actions of Sidebar */}
-            {sidebarTab === 'detail' && (
-              <div className="pt-6 border-t border-slate-200/50 space-y-3 mt-6 shrink-0 z-10 w-full bg-m3-surface">
-                <button 
-                  onClick={() => {
-                    setKeepInitialBalance(false);
-                    setKeepFutureRecurringRules(false);
-                    setKeepPastRecurringRecords(false);
-                    setKeepTodayAndFutureRecords(false);
-                    setIsResetOptionsExpanded(false);
-                    setIsResetModalOpen(true);
-                  }}
-                  className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full font-black text-xs transition-colors active:scale-95 border border-m3-surface-container-high shadow-xs"
-                >
-                  {t('데이터 초기화')}
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button 
-                    onClick={() => openDataSyncModal('export')}
-                    className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
-                  >
-                    <Upload size={13} /> {t('내보내기')}
-                  </button>
-                  <button 
-                    onClick={() => openDataSyncModal('import')}
-                    className="py-2.5 bg-slate-50 text-slate-600 rounded-full font-black text-[11px] hover:bg-slate-100 transition-colors shadow-3xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-m3-surface-container-high shadow-xs"
-                  >
-                    <Download size={13} /> {t('불러오기')}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </aside>
 
