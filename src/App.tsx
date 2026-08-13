@@ -2722,6 +2722,33 @@ export default function App() {
               ) : (
                 /* Settings Tab */
                 <div className="space-y-5">
+                  {/* Initial Balance Setting */}
+                  <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                        {t('기초 자산 설정')} (현재 통장 잔고)
+                      </span>
+                      <span className="text-[10px] text-m3-primary font-bold">
+                        시작 자산
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={new Intl.NumberFormat('ko-KR').format(initialBalance)}
+                        onChange={handleInitialBalanceChange}
+                        className="w-full bg-white dark:bg-slate-700/80 border border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 focus:bg-m3-surface rounded-2xl px-4 py-3 text-lg font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-m3-primary/15 transition-all tabular-nums tracking-tight"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-extrabold text-xs">
+                        {isComradeMode ? '억 원' : '₩'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-medium leading-tight">
+                      달력 수지 시뮬레이션의 기준이 되는 시작 통장 잔고입니다.
+                    </p>
+                  </section>
+
                   {/* Theme Mode Selection */}
                   <section className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-3xl p-4 space-y-3 shadow-3xs">
                     <div className="flex items-center justify-between">
